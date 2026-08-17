@@ -1,16 +1,12 @@
 [build]
-  command = "npm run build"
+  command = "npm install --include=optional --force && npm run build"
   publish = "dist"
-
 [build.environment]
-  # Sem isso, o Nitro tenta empacotar pra Cloudflare (padrão do template Lovable)
-  # e o deploy na Netlify quebra ou fica incompleto.
+  # Força o preset do Nitro para a Netlify
   NITRO_PRESET = "netlify"
   NODE_VERSION = "22"
 
-# Garante que o preview de PRs/branches também usa o preset certo
 [context.deploy-preview.environment]
   NITRO_PRESET = "netlify"
-
 [context.branch-deploy.environment]
   NITRO_PRESET = "netlify"
