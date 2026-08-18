@@ -47,14 +47,14 @@ export function useAlertas() {
         // Etapa 1 -> 2: mecânico concluiu, gerente precisa finalizar/entregar.
         channel.on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "atendimentos" },
+          { event: "*", schema: "public", table: "atendimentos" },
           (payload) => {
             void qc.invalidateQueries({ queryKey: ["dashboard"] });
             void qc.invalidateQueries({ queryKey: ["patio"] });
             void qc.invalidateQueries({ queryKey: ["historico"] });
             const novo = payload.new as { status?: string; placa?: string; cliente_nome?: string };
             const antigo = payload.old as { status?: string };
-            if (novo.status === "aguardando_gerente" && antigo.status !== "aguardando_gerente") {
+            if (payload.eventType === "UPDATE" && novo.status === "aguardando_gerente" && antigo.status !== "aguardando_gerente") {
               notificar(
                 "Carro pronto para finalizar",
                 `${novo.placa ?? ""} — ${novo.cliente_nome ?? "cliente"} está aguardando finalização.`,
@@ -65,7 +65,7 @@ export function useAlertas() {
         // Cenário B: mecânico criou/atualizou vistoria — reflete no painel do gerente.
         channel.on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "atendimento_servicos" },
+          { event: "*", schema: "public", table: "atendimento_servicos" },
           (payload) => {
             void qc.invalidateQueries({ queryKey: ["dashboard"] });
             void qc.invalidateQueries({ queryKey: ["patio"] });
@@ -73,7 +73,7 @@ export function useAlertas() {
             void qc.invalidateQueries({ queryKey: ["atendimento"] });
             const novo = payload.new as { status?: string; nome?: string };
             const antigo = payload.old as { status?: string };
-            if (novo.status === "concluido" && antigo.status !== "concluido") {
+            if (payload.eventType === "UPDATE" && novo.status === "concluido" && antigo.status !== "concluido") {
               notificar("Serviço concluído", `"${novo.nome ?? "Item"}" foi marcado como feito.`);
             }
           },
@@ -96,7 +96,7 @@ export function useAlertas() {
         channel.on(
           "postgres_changes",
           {
-            event: "UPDATE",
+            event: "*",
             schema: "public",
             table: "atendimento_servicos",
             filter: `mecanico_id=eq.${mec.id}`,
@@ -105,16 +105,22 @@ export function useAlertas() {
             void qc.invalidateQueries({ queryKey: ["dashboard"] });
             void qc.invalidateQueries({ queryKey: ["patio"] });
             void qc.invalidateQueries({ queryKey: ["atendimento"] });
-            const novo = payload.new as { nome?: string };
+            const novo = payload.new as { nome?: string; mecanico_id?: string | null };
             const antigo = payload.old as { mecanico_id?: string | null };
-            if (!antigo.mecanico_id) {
+            if (payload.eventType === "UPDATE" && novo.mecanico_id === mec.id && antigo.mecanico_id !== mec.id) {
               notificar("Novo serviço atribuído a você", novo.nome ?? "Confira seus atendimentos.");
             }
           },
         );
       }
 
-      if (channel && !cancelado) channel.subscribe();
+      if (channel && !cancelado) {
+        channel.subscribe((status, err) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            console.error("[Realtime] falha no canal", { role, status, error: err });
+          }
+        });
+      }
     };
 
     void iniciar();
