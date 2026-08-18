@@ -113,15 +113,32 @@ export const criarMecanico = createServerFn({ method: "POST" })
     userId = created.user?.id;
     if (!userId) throw new Error("Falha ao criar usuário do mecânico.");
 
-    const { error: mecErr } = await supabaseAdmin.from("mecanicos").insert({
+    const dadosMecanico = {
       nome: data.nome,
       telefone: data.telefone,
       email,
       user_id: userId,
-    });
-    if (mecErr) {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-      throw new Error(mecErr.message);
+      ativo: true,
+      deleted_at: null,
+    };
+
+    // O trigger on_auth_mecanico_created pode ter criado a linha automaticamente
+    // junto com a conta Auth. Atualizamos essa linha; só inserimos se o trigger não
+    // existir no ambiente, mantendo compatibilidade com staging e produção.
+    const { data: mecanicoExistente, error: atualizarErr } = await supabaseAdmin
+      .from("mecanicos")
+      .update(dadosMecanico)
+      .eq("user_id", userId)
+      .select("id")
+      .maybeSingle();
+    if (atualizarErr) throw new Error(atualizarErr.message);
+
+    if (!mecanicoExistente) {
+      const { error: inserirErr } = await supabaseAdmin.from("mecanicos").insert(dadosMecanico);
+      if (inserirErr) {
+        await supabaseAdmin.auth.admin.deleteUser(userId);
+        throw new Error(inserirErr.message);
+      }
     }
 
     return { id: userId };
