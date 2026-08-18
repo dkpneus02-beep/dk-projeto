@@ -332,7 +332,7 @@ function AtendimentoPage() {
           <div className="card-surface p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase">Serviços</h2>
-              <span className="num text-sm text-muted-foreground">Total {brl(total)}</span>
+              <span className="num text-sm text-muted-foreground">Total dos serviços: {brl(total)}</span>
             </div>
 
             <div className="space-y-3">
@@ -347,13 +347,13 @@ function AtendimentoPage() {
                 <div key={s.id} className="rounded-md border p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Serviço</p>
                       <p className="font-medium">{s.nome}</p>
                       {s.peca_id && (
-                        <p className="text-xs text-muted-foreground">
-                          <i className="fa-solid fa-box-open mr-1" />
-                          Peça usada: {(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "item do estoque"}
-                          {` · qtd. ${Number(s.quantidade || 1)}`}
-                        </p>
+                        <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                          <p><i className="fa-solid fa-box-open mr-1" /><strong>Produto do estoque:</strong> {(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "item do estoque"}</p>
+                          <p><strong>Quantidade:</strong> {Number(s.quantidade || 1)} · <strong>Valor registrado:</strong> {brl(s.valor)}</p>
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -394,12 +394,14 @@ function AtendimentoPage() {
                   </div>
                   {!finalizado && gerente && (
                     <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                      <Select
-                        value={s.status}
-                        onValueChange={(v) =>
-                          updServico.mutate({ sid: s.id, patch: { status: v } })
-                        }
-                      >
+                      <div className="space-y-1.5">
+                        <Label>Status do serviço</Label>
+                        <Select
+                          value={s.status}
+                          onValueChange={(v) =>
+                            updServico.mutate({ sid: s.id, patch: { status: v } })
+                          }
+                        >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -407,9 +409,12 @@ function AtendimentoPage() {
                           <SelectItem value="aguardando">Aguardando</SelectItem>
                           <SelectItem value="em_execucao">Em execução</SelectItem>
                           <SelectItem value="concluido">Concluído</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Responsável pelo serviço</Label>
+                        <Select
                         value={s.mecanico_id ?? "none"}
                         onValueChange={(v) =>
                           updServico.mutate({
@@ -430,19 +435,25 @@ function AtendimentoPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="num"
-                        defaultValue={Number(s.valor)}
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Preço registrado (R$)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          className="num"
+                          defaultValue={Number(s.valor)}
                         onBlur={(e) =>
                           updServico.mutate({
                             sid: s.id,
                             patch: { valor: Number(e.target.value) || 0 },
                           })
                         }
-                      />
+                        />
+                      </div>
                       <div className="grid gap-2 sm:col-span-3 sm:grid-cols-[1fr_120px]">
+                        <div className="space-y-1.5">
+                          <Label>Produto/peça/óleo/pneu usado</Label>
                         <div className="space-y-2">
                           <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
                             <Select
@@ -505,6 +516,9 @@ function AtendimentoPage() {
                             {pecasFiltradas.length} item(ns) encontrado(s) · a baixa ocorre somente na finalização da OS
                           </p>
                         </div>
+                        <div className="space-y-1.5">
+                          <Label>Quantidade usada</Label>
+                        </div>
                         <Input
                           type="number"
                           min="0.01"
@@ -520,6 +534,7 @@ function AtendimentoPage() {
                             })
                           }
                         />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -553,18 +568,18 @@ function AtendimentoPage() {
                         </p>
                       )}
                       <p className="text-sm text-muted-foreground">
-                        Responsável:{" "}
+                        <strong>Responsável:</strong>{" "}
                         <span className="font-medium text-foreground">
                           {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ??
                             "sem mecânico atribuído"}
                         </span>{" "}
-                        · <span className="num">{brl(s.valor)}</span>
-                      </p>
+                      · <strong>Preço registrado:</strong> <span className="num">{brl(s.valor)}</span>
+                    </p>
                     </div>
                   )}
                   {finalizado && (
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Mecânico: {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ?? "—"}{" "}
+                      <strong>Responsável:</strong> {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ?? "—"}{" "}
                       · <span className="num">{brl(s.valor)}</span>
                     </p>
                   )}
@@ -696,7 +711,7 @@ function AtendimentoPage() {
               label="Serviços"
               value={`${servicos.filter((s) => s.status === "concluido").length}/${servicos.length} concluídos`}
             />
-            <Info label="Total" value={brl(total)} />
+            <Info label="Total dos serviços" value={brl(total)} />
             {finalizado && (
               <>
                 <Info label="Desconto" value={brl(data.desconto)} />
