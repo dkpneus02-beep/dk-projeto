@@ -9,8 +9,8 @@ self.addEventListener("push", (event) => {
   const title = data.title || "DK Auto Center";
   const options = {
     body: data.body || "Há uma nova notificação da oficina.",
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: "/dk-logo-192.png",
+    badge: "/dk-favicon-32.png",
     tag: data.tag || data.notification_id || "dk-auto-center",
     renotify: Boolean(data.renotify),
     data: { url: data.url || "/notificacoes-internas", notification_id: data.notification_id || null },
