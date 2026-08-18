@@ -31,13 +31,19 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["dashboard", hoje],
     queryFn: async () => {
-      const [patio, finalizados, retornos, pecas] = await Promise.all([
+      const [patio, pendencias, finalizados, retornos, pecas, mecanicos] = await Promise.all([
         supabase
           .from("atendimentos")
           .select("id, numero, placa, modelo, cliente_nome, entrada_at")
           .eq("status", "aberto")
           .is("deleted_at", null)
           .order("entrada_at"),
+        supabase
+          .from("atendimentos")
+          .select("id, numero, placa, modelo, cliente_nome, entrada_at, pronto_at, atendimento_servicos(nome, valor, mecanico_id)")
+          .eq("status", "aguardando_gerente")
+          .is("deleted_at", null)
+          .order("pronto_at", { ascending: true }),
         supabase
           .from("atendimentos")
           .select("id, total, finalizado_at")
@@ -50,17 +56,22 @@ function Dashboard() {
           .order("vencimento")
           .limit(6),
         supabase.from("pecas").select("id, nome, estoque, estoque_minimo").is("deleted_at", null),
+        supabase.from("mecanicos").select("id, nome").is("deleted_at", null),
       ]);
       return {
         patio: patio.data ?? [],
+        pendencias: pendencias.data ?? [],
         finalizados: finalizados.data ?? [],
         retornos: retornos.data ?? [],
         pecas: (pecas.data ?? []).filter((p) => Number(p.estoque) <= Number(p.estoque_minimo)),
+        mecanicos: mecanicos.data ?? [],
       };
     },
   });
 
   const patio = data?.patio ?? [];
+  const pendencias = data?.pendencias ?? [];
+  const mecanicoNome = new Map((data?.mecanicos ?? []).map((m) => [m.id, m.nome]));
   const faturamento = (data?.finalizados ?? []).reduce((s, a) => s + Number(a.total), 0);
   const retornos = data?.retornos ?? [];
   const baixos = data?.pecas ?? [];
@@ -97,6 +108,50 @@ function Dashboard() {
           hint="Itens no mínimo ou abaixo"
         />
       </div>
+
+      <section className="card-surface mb-6 border-primary/30 p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="font-display text-xl font-bold uppercase">Aguardando conferência do gerente</h2>
+            <p className="text-sm text-muted-foreground">
+              {pendencias.length === 0
+                ? "Nenhum atendimento aguardando conferência."
+                : `${pendencias.length} atendimento${pendencias.length === 1 ? "" : "s"} pronto${pendencias.length === 1 ? "" : "s"} para revisar.`}
+            </p>
+          </div>
+          <Badge variant={pendencias.length > 0 ? "destructive" : "secondary"}>
+            {pendencias.length}
+          </Badge>
+        </div>
+        <div className="space-y-2">
+          {pendencias.map((a) => {
+            const servicosPendentes = a.atendimento_servicos ?? [];
+            const mecanicosDaOs = [...new Set(servicosPendentes.map((s) => s.mecanico_id).filter(Boolean))]
+              .map((id) => mecanicoNome.get(id))
+              .filter(Boolean)
+              .join(", ");
+            return (
+              <Link
+                key={a.id}
+                to="/atendimento/$id"
+                params={{ id: a.id }}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 p-3 hover:bg-muted/50"
+              >
+                <div>
+                  <p className="font-display font-bold tracking-wider">OS #{a.numero} · {a.placa}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {a.cliente_nome} · {a.modelo ?? "veículo"} {mecanicosDaOs ? `· ${mecanicosDaOs}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">{dt(a.pronto_at ?? a.entrada_at)}</span>
+                  <Badge variant="outline">Conferir atendimento</Badge>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="card-surface p-5">
