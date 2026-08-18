@@ -20,6 +20,15 @@ export const Route = createFileRoute("/notificacoes-internas")({
   component: NotificacoesInternas,
 });
 
+const VAPID_PUBLIC_KEY = "BACQ9HGaG3flAmuhcGW0-cykikhDXlyWO6QKeGhnEqtrHHP_GoenMIIrVRPQT9AqW2bbnChaqNWONV-rygFPSFY";
+
+function base64UrlToUint8Array(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replaceAll("-", "+").replaceAll("_", "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
+}
+
 type Notificacao = {
   id: string;
   tipo: string;
@@ -38,6 +47,7 @@ function NotificacoesInternas() {
   const navigate = useNavigate();
   const [filtro, setFiltro] = useState<"pendentes" | "todas">("pendentes");
   const [permissao, setPermissao] = useState<string>("unsupported");
+  const [pushStatus, setPushStatus] = useState<"idle" | "ativando" | "ativo" | "erro">("idle");
   const db = supabase as any;
 
   useEffect(() => {
@@ -45,10 +55,47 @@ function NotificacoesInternas() {
   }, []);
 
   const ativarNotificacoes = async () => {
-    const resultado = await pedirPermissaoNotificacoes();
-    setPermissao(resultado);
-    if (resultado === "granted") toast.success("Notificações do navegador ativadas");
-    else if (resultado === "denied") toast.error("Permissão negada. A central interna continuará funcionando.");
+    setPushStatus("ativando");
+    try {
+      const resultado = await pedirPermissaoNotificacoes();
+      setPermissao(resultado);
+      if (resultado !== "granted") {
+        setPushStatus("idle");
+        if (resultado === "denied") toast.error("Permissão negada. A central interna continuará funcionando.");
+        return;
+      }
+      if (!user?.id || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        throw new Error("Este navegador não oferece Web Push compatível.");
+      }
+
+      const registration = await navigator.serviceWorker.register("/push-sw.js");
+      const current = await registration.pushManager.getSubscription();
+      const subscription = current ?? await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY),
+      });
+      const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+      if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
+        throw new Error("O navegador não retornou uma subscription completa.");
+      }
+
+      const { error: saveError } = await db.from("webpush_subscriptions").upsert({
+        user_id: user.id,
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+        user_agent: navigator.userAgent,
+        device_label: /Android/i.test(navigator.userAgent) ? "Celular Android" : "Navegador atual",
+        ativo: true,
+        ultimo_erro_at: null,
+      }, { onConflict: "endpoint" });
+      if (saveError) throw saveError;
+      setPushStatus("ativo");
+      toast.success("Este dispositivo foi ativado para alertas em segundo plano");
+    } catch (error) {
+      setPushStatus("erro");
+      toast.error(error instanceof Error ? error.message : "Não foi possível ativar o alerta no celular.");
+    }
   };
 
   const { data, isLoading, error } = useQuery<Notificacao[]>({
@@ -101,11 +148,11 @@ function NotificacoesInternas() {
     <AppShell>
       <PageHeader title="Notificações internas" subtitle="Tarefas e eventos da equipe">
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {permissao === "granted" ? (
-            <Badge variant="secondary"><i className="fa-solid fa-bell mr-1" /> Navegador ativado</Badge>
+          {pushStatus === "ativo" ? (
+            <Badge variant="secondary"><i className="fa-solid fa-bell mr-1" /> Celular ativado</Badge>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => void ativarNotificacoes()}>
-              <i className="fa-solid fa-bell mr-1" /> Ativar alerta no navegador
+            <Button size="sm" variant="outline" disabled={pushStatus === "ativando"} onClick={() => void ativarNotificacoes()}>
+              <i className="fa-solid fa-bell mr-1" /> {pushStatus === "ativando" ? "Ativando..." : "Ativar alerta no celular"}
             </Button>
           )}
           <div className="flex items-center gap-2">

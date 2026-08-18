@@ -17,8 +17,10 @@ import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as HistoricoRouteImport } from './routes/historico'
 import { Route as MecanicosRouteImport } from './routes/mecanicos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
+import { Route as NotificacoesInternasRouteImport } from './routes/notificacoes-internas'
 import { Route as PatioRouteImport } from './routes/patio'
 import { Route as PecasRouteImport } from './routes/pecas'
+import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AtendimentoIdRouteImport } from './routes/atendimento.$id'
 
@@ -62,6 +64,11 @@ const NotificacoesRoute = NotificacoesRouteImport.update({
   path: '/notificacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NotificacoesInternasRoute = NotificacoesInternasRouteImport.update({
+  id: '/notificacoes-internas',
+  path: '/notificacoes-internas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PatioRoute = PatioRouteImport.update({
   id: '/patio',
   path: '/patio',
@@ -70,6 +77,11 @@ const PatioRoute = PatioRouteImport.update({
 const PecasRoute = PecasRouteImport.update({
   id: '/pecas',
   path: '/pecas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RelatoriosRoute = RelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -92,8 +104,10 @@ export interface FileRoutesByFullPath {
   '/historico': typeof HistoricoRoute
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/notificacoes-internas': typeof NotificacoesInternasRoute
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
+  '/relatorios': typeof RelatoriosRoute
   '/reset-password': typeof ResetPasswordRoute
   '/atendimento/$id': typeof AtendimentoIdRoute
 }
@@ -106,8 +120,10 @@ export interface FileRoutesByTo {
   '/historico': typeof HistoricoRoute
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/notificacoes-internas': typeof NotificacoesInternasRoute
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
+  '/relatorios': typeof RelatoriosRoute
   '/reset-password': typeof ResetPasswordRoute
   '/atendimento/$id': typeof AtendimentoIdRoute
 }
@@ -121,8 +137,10 @@ export interface FileRoutesById {
   '/historico': typeof HistoricoRoute
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
+  '/notificacoes-internas': typeof NotificacoesInternasRoute
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
+  '/relatorios': typeof RelatoriosRoute
   '/reset-password': typeof ResetPasswordRoute
   '/atendimento/$id': typeof AtendimentoIdRoute
 }
@@ -137,8 +155,10 @@ export interface FileRouteTypes {
     | '/historico'
     | '/mecanicos'
     | '/notificacoes'
+    | '/notificacoes-internas'
     | '/patio'
     | '/pecas'
+    | '/relatorios'
     | '/reset-password'
     | '/atendimento/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -151,8 +171,10 @@ export interface FileRouteTypes {
     | '/historico'
     | '/mecanicos'
     | '/notificacoes'
+    | '/notificacoes-internas'
     | '/patio'
     | '/pecas'
+    | '/relatorios'
     | '/reset-password'
     | '/atendimento/$id'
   id:
@@ -165,8 +187,10 @@ export interface FileRouteTypes {
     | '/historico'
     | '/mecanicos'
     | '/notificacoes'
+    | '/notificacoes-internas'
     | '/patio'
     | '/pecas'
+    | '/relatorios'
     | '/reset-password'
     | '/atendimento/$id'
   fileRoutesById: FileRoutesById
@@ -180,8 +204,10 @@ export interface RootRouteChildren {
   HistoricoRoute: typeof HistoricoRoute
   MecanicosRoute: typeof MecanicosRoute
   NotificacoesRoute: typeof NotificacoesRoute
+  NotificacoesInternasRoute: typeof NotificacoesInternasRoute
   PatioRoute: typeof PatioRoute
   PecasRoute: typeof PecasRoute
+  RelatoriosRoute: typeof RelatoriosRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   AtendimentoIdRoute: typeof AtendimentoIdRoute
 }
@@ -244,6 +270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotificacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/notificacoes-internas': {
+      id: '/notificacoes-internas'
+      path: '/notificacoes-internas'
+      fullPath: '/notificacoes-internas'
+      preLoaderRoute: typeof NotificacoesInternasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/patio': {
       id: '/patio'
       path: '/patio'
@@ -256,6 +289,13 @@ declare module '@tanstack/react-router' {
       path: '/pecas'
       fullPath: '/pecas'
       preLoaderRoute: typeof PecasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/relatorios': {
+      id: '/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof RelatoriosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -284,8 +324,10 @@ const rootRouteChildren: RootRouteChildren = {
   HistoricoRoute: HistoricoRoute,
   MecanicosRoute: MecanicosRoute,
   NotificacoesRoute: NotificacoesRoute,
+  NotificacoesInternasRoute: NotificacoesInternasRoute,
   PatioRoute: PatioRoute,
   PecasRoute: PecasRoute,
+  RelatoriosRoute: RelatoriosRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   AtendimentoIdRoute: AtendimentoIdRoute,
 }
