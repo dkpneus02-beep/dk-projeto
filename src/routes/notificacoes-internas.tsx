@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -227,7 +227,7 @@ function NotificacoesInternas() {
               <div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" onClick={() => abrirMensagem(n)}><i className="fa-solid fa-folder-open" /> Abrir</Button>{n.atendimento_id && <Button size="sm" variant="outline" onClick={() => void navigate({ to: "/atendimento/$id", params: { id: n.atendimento_id! } })}>Abrir OS</Button>}{gerente && <Button size="sm" variant="ghost" onClick={() => setEditando(n)}><i className="fa-solid fa-pen" /></Button>}{gerente && <ConfirmActionDialog trigger={<Button size="sm" variant="ghost" title="Excluir mensagem"><i className="fa-solid fa-trash" /></Button>} title="Excluir mensagem" description="A mensagem será ocultada da central, sem apagar o registro técnico." confirmLabel="Excluir" destructive onConfirm={() => excluirMensagem.mutateAsync(n.id)} />}</div>
             </div>;
           })}
-          {!isLoading && visiveis.length === 0 && <div className="card-surface p-12 text-center text-muted-foreground"><i className="fa-solid fa-comments mb-3 text-3xl" /><p>Nenhuma mensagem neste filtro.</p><Link to="/avisos" className="mt-2 inline-block text-sm text-primary hover:underline">Ver avisos de serviço</Link></div>}
+          {!isLoading && visiveis.length === 0 && <div className="card-surface p-12 text-center text-muted-foreground"><i className="fa-solid fa-comments mb-3 text-3xl" /><p>Nenhuma mensagem neste filtro.</p></div>}
         </div>
       </div>
 

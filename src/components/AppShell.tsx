@@ -13,7 +13,6 @@ const NAV_ITEMS: Record<NavKey, { to: string; icon: string; label: string }> = {
   pecas: { to: "/pecas", icon: "fa-boxes-stacked", label: "Peças e pneus" },
   mecanicos: { to: "/mecanicos", icon: "fa-screwdriver-wrench", label: "Mecânicos" },
   notificacoes: { to: "/notificacoes", icon: "fa-bell", label: "Retornos" },
-  avisos: { to: "/avisos", icon: "fa-comment-dots", label: "Avisos" },
   configuracoes: { to: "/configuracoes", icon: "fa-gear", label: "Configurações" },
   relatorios: { to: "/relatorios", icon: "fa-chart-line", label: "Relatórios" },
   "notificacoes-internas": { to: "/notificacoes-internas", icon: "fa-bell", label: "Notificações" },
