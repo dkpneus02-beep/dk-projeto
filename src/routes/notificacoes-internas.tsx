@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { dt } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
+import { pedirPermissaoNotificacoes } from "@/hooks/useAlertas";
 
 export const Route = createFileRoute("/notificacoes-internas")({
   head: () => ({
@@ -36,7 +37,19 @@ function NotificacoesInternas() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [filtro, setFiltro] = useState<"pendentes" | "todas">("pendentes");
+  const [permissao, setPermissao] = useState<string>("unsupported");
   const db = supabase as any;
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) setPermissao(Notification.permission);
+  }, []);
+
+  const ativarNotificacoes = async () => {
+    const resultado = await pedirPermissaoNotificacoes();
+    setPermissao(resultado);
+    if (resultado === "granted") toast.success("Notificações do navegador ativadas");
+    else if (resultado === "denied") toast.error("Permissão negada. A central interna continuará funcionando.");
+  };
 
   const { data, isLoading, error } = useQuery<Notificacao[]>({
     queryKey: ["notificacoes-internas", user?.id, role, filtro],
@@ -87,13 +100,22 @@ function NotificacoesInternas() {
   return (
     <AppShell>
       <PageHeader title="Notificações internas" subtitle="Tarefas e eventos da equipe">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {permissao === "granted" ? (
+            <Badge variant="secondary"><i className="fa-solid fa-bell mr-1" /> Navegador ativado</Badge>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => void ativarNotificacoes()}>
+              <i className="fa-solid fa-bell mr-1" /> Ativar alerta no navegador
+            </Button>
+          )}
+          <div className="flex items-center gap-2">
           <Button size="sm" variant={filtro === "pendentes" ? "default" : "outline"} onClick={() => setFiltro("pendentes")}>
             Pendentes {pendentes > 0 && <Badge variant="secondary" className="ml-1">{pendentes}</Badge>}
           </Button>
-          <Button size="sm" variant={filtro === "todas" ? "default" : "outline"} onClick={() => setFiltro("todas")}>
-            Todas
-          </Button>
+            <Button size="sm" variant={filtro === "todas" ? "default" : "outline"} onClick={() => setFiltro("todas")}>
+              Todas
+            </Button>
+          </div>
         </div>
       </PageHeader>
 
