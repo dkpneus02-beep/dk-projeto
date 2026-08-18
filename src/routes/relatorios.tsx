@@ -37,23 +37,19 @@ function Relatorios() {
     queryKey: ["relatorios", inicio, fim],
     enabled: gerente && !!inicio && !!fim,
     queryFn: async () => {
-      const inicioIso = `${inicio}T00:00:00.000Z`;
-      const fimIso = `${fim}T23:59:59.999Z`;
-      const [atendimentos, servicos, mecanicos, pecas, retornos] = await Promise.all([
+      // O input de data é local; o banco armazena timestamptz em UTC.
+      const inicioIso = new Date(`${inicio}T00:00:00`).toISOString();
+      const fimIso = new Date(`${fim}T23:59:59.999`).toISOString();
+      const [atendimentos, mecanicos, pecas, retornos] = await Promise.all([
         supabase
           .from("atendimentos")
           .select("id, numero, total, finalizado_at")
           .eq("status", "finalizado")
+          .is("deleted_at", null)
           .gte("finalizado_at", inicioIso)
           .lte("finalizado_at", fimIso)
           .order("finalizado_at", { ascending: false })
           .limit(500),
-        supabase
-          .from("atendimento_servicos")
-          .select("atendimento_id, nome, valor, mecanico_id, peca_id, quantidade, created_at")
-          .gte("created_at", inicioIso)
-          .lte("created_at", fimIso)
-          .limit(1000),
         supabase.from("mecanicos").select("id, nome").limit(200),
         supabase
           .from("pecas")
@@ -69,9 +65,18 @@ function Relatorios() {
           .limit(200),
       ]);
 
-      const respostas = [atendimentos, servicos, mecanicos, pecas, retornos];
-      const falha = respostas.find((resposta) => resposta.error)?.error;
-      if (falha) throw falha;
+      const falhaInicial = [atendimentos, mecanicos, pecas, retornos].find((resposta) => resposta.error)?.error;
+      if (falhaInicial) throw falhaInicial;
+
+      const idsFinalizados = (atendimentos.data ?? []).map((atendimento) => atendimento.id);
+      const servicos = idsFinalizados.length
+        ? await supabase
+            .from("atendimento_servicos")
+            .select("atendimento_id, nome, valor, mecanico_id, peca_id, quantidade, created_at")
+            .in("atendimento_id", idsFinalizados)
+            .limit(1000)
+        : { data: [], error: null };
+      if (servicos.error) throw servicos.error;
 
       return {
         atendimentos: atendimentos.data ?? [],

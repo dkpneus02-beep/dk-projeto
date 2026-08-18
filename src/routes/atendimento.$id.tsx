@@ -354,12 +354,26 @@ function AtendimentoPage() {
                     (filtroPeca.tipo === "todos" || p.tipo === filtroPeca.tipo || p.categoria === filtroPeca.tipo) &&
                     matches(filtroPeca.busca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
                 );
+                const statusTone =
+                  s.status === "concluido"
+                    ? "border-l-success bg-success/5"
+                    : s.status === "em_execucao"
+                      ? "border-l-sky-500 bg-sky-500/5"
+                      : "border-l-warning bg-warning/5";
+                const statusIcon =
+                  s.status === "concluido"
+                    ? "fa-circle-check"
+                    : s.status === "em_execucao"
+                      ? "fa-screwdriver-wrench"
+                      : "fa-hourglass-half";
                 return (
-                <div key={s.id} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Serviço</p>
-                      <p className="font-medium">{s.nome}</p>
+                <div key={s.id} className={`overflow-hidden rounded-lg border border-l-4 bg-card p-4 shadow-sm ${statusTone}`}>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <i className={`fa-solid ${statusIcon} mr-1.5`} /> Serviço
+                      </p>
+                      <p className="truncate text-base font-semibold">{s.nome}</p>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                         <span>
                           <i className="fa-regular fa-clock mr-1" />
@@ -414,7 +428,7 @@ function AtendimentoPage() {
                     </div>
                   </div>
                   {!finalizado && gerente && (
-                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div className="mt-3 grid gap-2 rounded-md bg-muted/20 p-3 sm:grid-cols-3">
                       <div className="space-y-1.5">
                         <Label>Status do serviço</Label>
                         <Select
@@ -472,7 +486,7 @@ function AtendimentoPage() {
                         }
                         />
                       </div>
-                      <div className="grid gap-2 sm:col-span-3 sm:grid-cols-[1fr_120px]">
+                      <div className="grid gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[1fr_120px]">
                         <div className="space-y-1.5">
                           <Label>Produto/peça/óleo/pneu usado</Label>
                         <div className="space-y-2">
@@ -560,7 +574,7 @@ function AtendimentoPage() {
                     </div>
                   )}
                   {!finalizado && !gerente && (
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3 space-y-2 rounded-md border border-primary/10 bg-muted/20 p-3">
                       {/* Mecânico não vê nem altera responsável/valor — só o status do
                           próprio serviço. Campos abaixo são somente leitura (a trava
                           real está no banco: RLS + trigger bloqueiam a escrita). */}
@@ -599,7 +613,7 @@ function AtendimentoPage() {
                     </div>
                   )}
                   {finalizado && (
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-1 border-t pt-3 text-sm text-muted-foreground">
                       <strong>Responsável:</strong> {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ?? "—"}{" "}
                       · <span className="num">{brl(s.valor)}</span>
                     </p>
