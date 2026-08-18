@@ -20,7 +20,7 @@ export const Route = createFileRoute("/relatorios")({
 
 type RelatorioData = {
   atendimentos: { id: string; numero: number; total: number; finalizado_at: string | null }[];
-  servicos: { nome: string; valor: number; mecanico_id: string | null; peca_id: string | null; quantidade: number; created_at: string }[];
+  servicos: { atendimento_id: string; nome: string; valor: number; mecanico_id: string | null; peca_id: string | null; quantidade: number; created_at: string }[];
   mecanicos: { id: string; nome: string }[];
   pecas: { id: string; nome: string; estoque: number; estoque_minimo: number; deleted_at: string | null }[];
   retornos: { id: string; cliente_nome: string; servico: string; vencimento: string; status: string }[];
@@ -51,7 +51,7 @@ function Relatorios() {
           .limit(500),
         supabase
           .from("atendimento_servicos")
-          .select("nome, valor, mecanico_id, peca_id, quantidade, created_at")
+          .select("atendimento_id, nome, valor, mecanico_id, peca_id, quantidade, created_at")
           .gte("created_at", inicioIso)
           .lte("created_at", fimIso)
           .limit(1000),
@@ -96,10 +96,12 @@ function Relatorios() {
   const nomesMecanicos = new Map((data?.mecanicos ?? []).map((m) => [m.id, m.nome]));
   const nomesPecas = new Map((data?.pecas ?? []).map((p) => [p.id, p.nome]));
 
-  for (const servico of data?.servicos ?? []) {
-    const chave = servico.mecanico_id ?? "sem-responsavel";
+  const finalizadosIds = new Set((data?.atendimentos ?? []).map((a) => a.id));
+  for (const servico of (data?.servicos ?? []).filter((item) => finalizadosIds.has(item.atendimento_id))) {
+    const nomeMecanico = servico.mecanico_id ? nomesMecanicos.get(servico.mecanico_id) ?? "Mecânico removido" : "Sem responsável";
+    const chave = nomeMecanico;
     const atual = porMecanico.get(chave) ?? {
-      nome: servico.mecanico_id ? nomesMecanicos.get(servico.mecanico_id) ?? "Mecânico removido" : "Sem responsável",
+      nome: nomeMecanico,
       quantidade: 0,
       valor: 0,
     };
