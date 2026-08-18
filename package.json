@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "postbuild": "mkdir -p dist && cp -r .output/public/. dist/",
+    "postbuild": "mkdir -p dist && if [ -d .output/public ]; then cp -r .output/public/. dist/; fi",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
