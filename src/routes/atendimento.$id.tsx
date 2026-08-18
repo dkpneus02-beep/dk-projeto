@@ -60,8 +60,7 @@ function AtendimentoPage() {
   const { role, user, nome, mecanicoId } = useAuth();
   const gerente = isGerente(role);
   const [finalizando, setFinalizando] = useState(false);
-  const [buscaPeca, setBuscaPeca] = useState("");
-  const [tipoPeca, setTipoPeca] = useState("todos");
+  const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
     servicos: Parameters<typeof printReceipt>[1];
@@ -134,15 +133,6 @@ function AtendimentoPage() {
     [data],
   );
   const total = servicos.reduce((s, x) => s + Number(x.valor), 0);
-  const pecasFiltradas = useMemo(
-    () =>
-      (pecas ?? []).filter(
-        (p) =>
-          (tipoPeca === "todos" || p.tipo === tipoPeca || p.categoria === tipoPeca) &&
-          matches(buscaPeca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
-      ),
-    [pecas, buscaPeca, tipoPeca],
-  );
   const todosConcluidos = servicos.length > 0 && servicos.every((s) => s.status === "concluido");
   const finalizado = data?.status === "finalizado";
   const aguardandoGerente = data?.status === "aguardando_gerente";
@@ -309,7 +299,14 @@ function AtendimentoPage() {
             </div>
 
             <div className="space-y-3">
-              {servicos.map((s) => (
+              {servicos.map((s) => {
+                const filtroPeca = filtrosPeca[s.id] ?? { busca: "", tipo: "todos" };
+                const pecasFiltradas = (pecas ?? []).filter(
+                  (p) =>
+                    (filtroPeca.tipo === "todos" || p.tipo === filtroPeca.tipo || p.categoria === filtroPeca.tipo) &&
+                    matches(filtroPeca.busca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
+                );
+                return (
                 <div key={s.id} className="rounded-md border p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
@@ -411,7 +408,15 @@ function AtendimentoPage() {
                       <div className="grid gap-2 sm:col-span-3 sm:grid-cols-[1fr_120px]">
                         <div className="space-y-2">
                           <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
-                            <Select value={tipoPeca} onValueChange={setTipoPeca}>
+                            <Select
+                              value={filtroPeca.tipo}
+                              onValueChange={(tipo) =>
+                                setFiltrosPeca((atual) => ({
+                                  ...atual,
+                                  [s.id]: { ...filtroPeca, tipo },
+                                }))
+                              }
+                            >
                               <SelectTrigger aria-label="Filtrar estoque por tipo">
                                 <SelectValue placeholder="Tipo" />
                               </SelectTrigger>
@@ -422,8 +427,13 @@ function AtendimentoPage() {
                               </SelectContent>
                             </Select>
                             <Input
-                              value={buscaPeca}
-                              onChange={(e) => setBuscaPeca(e.target.value)}
+                              value={filtroPeca.busca}
+                              onChange={(e) =>
+                                setFiltrosPeca((atual) => ({
+                                  ...atual,
+                                  [s.id]: { ...filtroPeca, busca: e.target.value },
+                                }))
+                              }
                               placeholder="Buscar por nome, SKU, código, marca ou medida..."
                               aria-label="Buscar item do estoque"
                             />
@@ -522,7 +532,8 @@ function AtendimentoPage() {
                     </p>
                   )}
                 </div>
-              ))}
+                );
+              })}
               {servicos.length === 0 && (
                 <p className="text-sm text-muted-foreground">Nenhum serviço adicionado ainda.</p>
               )}
