@@ -61,6 +61,8 @@ function AtendimentoPage() {
   const gerente = isGerente(role);
   const [finalizando, setFinalizando] = useState(false);
   const [editarDadosOpen, setEditarDadosOpen] = useState(false);
+  const [novaAvaria, setNovaAvaria] = useState("");
+  const [fotoBusy, setFotoBusy] = useState(false);
   const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
@@ -224,6 +226,40 @@ function AtendimentoPage() {
 
   const avarias = (data.avarias as string[]) ?? [];
   const fotos = (data.fotos as string[]) ?? [];
+
+  const adicionarAvaria = async () => {
+    const avaria = novaAvaria.trim();
+    if (!avaria || avarias.includes(avaria)) return;
+    await salvarAtendimento.mutateAsync({ avarias: [...avarias, avaria] });
+    setNovaAvaria("");
+  };
+
+  const removerAvaria = async (avaria: string) => {
+    await salvarAtendimento.mutateAsync({ avarias: avarias.filter((item) => item !== avaria) });
+  };
+
+  const anexarFotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setFotoBusy(true);
+    try {
+      const novasFotos: string[] = [];
+      for (const file of Array.from(files)) {
+        const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
+        const { error } = await supabase.storage.from("vistorias").upload(path, file);
+        if (error) throw error;
+        const { data: signed } = await supabase.storage.from("vistorias").createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
+        if (signed?.signedUrl) novasFotos.push(signed.signedUrl);
+      }
+      if (novasFotos.length) {
+        await salvarAtendimento.mutateAsync({ fotos: [...fotos, ...novasFotos] });
+        toast.success(`${novasFotos.length} foto(s) adicionada(s) à vistoria`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível anexar as fotos.");
+    } finally {
+      setFotoBusy(false);
+    }
+  };
 
   return (
     <AppShell>
@@ -555,16 +591,34 @@ function AtendimentoPage() {
               <Info label="KM na entrada" value={data.km ? String(data.km) : "—"} />
               <Info label="Entrada" value={dt(data.entrada_at)} />
             </div>
-            {avarias.length > 0 && (
+            {(avarias.length > 0 || gerente) && (
               <div>
-                <p className="mb-1 text-sm font-medium">Avarias prévias registradas</p>
+                <p className="mb-1 text-sm font-medium">Avarias registradas</p>
                 <div className="flex flex-wrap gap-2">
                   {avarias.map((a) => (
-                    <Badge key={a} variant="secondary">
+                    <Badge key={a} variant="secondary" className="gap-1">
                       {a}
+                      {gerente && !finalizado && (
+                        <ConfirmActionDialog
+                          trigger={<button type="button" className="ml-1 text-muted-foreground hover:text-destructive" title={`Remover avaria ${a}`}><i className="fa-solid fa-xmark" /></button>}
+                          title="Remover avaria"
+                          description={<>Tem certeza que deseja remover <strong className="text-foreground">{a}</strong> da vistoria?</>}
+                          confirmLabel="Remover avaria"
+                          destructive
+                          onConfirm={() => removerAvaria(a)}
+                        />
+                      )}
                     </Badge>
                   ))}
                 </div>
+                {!finalizado && gerente && (
+                  <div className="mt-3 flex gap-2">
+                    <Input value={novaAvaria} onChange={(e) => setNovaAvaria(e.target.value)} placeholder="Adicionar nova avaria ou observação" />
+                    <Button type="button" variant="outline" onClick={() => void adicionarAvaria()} disabled={!novaAvaria.trim() || salvarAtendimento.isPending}>
+                      <i className="fa-solid fa-plus" /> Adicionar
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             {fotos.length > 0 && (
@@ -579,6 +633,13 @@ function AtendimentoPage() {
                     />
                   </a>
                 ))}
+              </div>
+            )}
+            {!finalizado && gerente && (
+              <div className="space-y-1.5">
+                <Label htmlFor="fotos-vistoria-adicionais">Adicionar fotos posteriores</Label>
+                <Input id="fotos-vistoria-adicionais" type="file" accept="image/*" multiple disabled={fotoBusy} onChange={(e) => void anexarFotos(e.target.files)} />
+                <p className="text-xs text-muted-foreground">As fotos novas serão acrescentadas às atuais, sem substituí-las.</p>
               </div>
             )}
             <div className="space-y-1.5">
