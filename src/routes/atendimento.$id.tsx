@@ -472,19 +472,34 @@ function AtendimentoPage() {
                       </Select>
                       </div>
                       <div className="space-y-1.5">
-                        <Label>Preço registrado (R$)</Label>
+                        <Label>Preço da peça (R$)</Label>
                         <Input
                           type="number"
                           step="0.01"
                           className="num"
-                          defaultValue={Number(s.valor)}
-                        onBlur={(e) =>
-                          updServico.mutate({
-                            sid: s.id,
-                            patch: { valor: Number(e.target.value) || 0 },
-                          })
-                        }
+                          key={`${s.id}-preco-${s.preco_peca ?? 0}`}
+                          defaultValue={Number(s.preco_peca ?? 0)}
+                          onBlur={(e) =>
+                            updServico.mutate({
+                              sid: s.id,
+                              patch: { preco_peca: Math.max(Number(e.target.value) || 0, 0) },
+                            })
+                          }
                         />
+                        <Label>Mão de obra/adicional (R$)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          className="num"
+                          defaultValue={Number(s.mao_de_obra ?? 0)}
+                          onBlur={(e) =>
+                            updServico.mutate({
+                              sid: s.id,
+                              patch: { mao_de_obra: Math.max(Number(e.target.value) || 0, 0) },
+                            })
+                          }
+                        />
+                        <p className="text-xs font-semibold text-primary">Total: <span className="num">{brl(s.valor)}</span></p>
                       </div>
                       <div className="grid gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[1fr_120px]">
                         <div className="space-y-1.5">
@@ -530,7 +545,7 @@ function AtendimentoPage() {
                               patch: {
                                 peca_id: v === "none" ? null : v,
                                 quantidade: s.quantidade || 1,
-                                ...(peca && v !== "none" ? { valor: Number(peca.preco_venda) } : {}),
+                                preco_peca: peca && v !== "none" ? Number(peca.preco_venda) * Number(s.quantidade || 1) : 0,
                               },
                             });
                           }}

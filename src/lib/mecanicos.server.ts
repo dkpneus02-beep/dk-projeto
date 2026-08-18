@@ -31,26 +31,56 @@ export const criarMecanico = createServerFn({ method: "POST" })
       throw new Error("Apenas o gerente pode cadastrar mecânicos.");
     }
 
+    const email = data.email.toLowerCase();
+    const { data: lista, error: listaErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (listaErr) throw new Error(listaErr.message);
+    const usuarioExistente = lista.users.find((u) => u.email?.toLowerCase() === email);
+
+    let userId = usuarioExistente?.id;
+    if (userId) {
+      const { data: registroExistente, error: registroErr } = await supabaseAdmin
+        .from("mecanicos")
+        .select("id, deleted_at, ativo")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (registroErr) throw new Error(registroErr.message);
+      if (registroExistente && !registroExistente.deleted_at && registroExistente.ativo) {
+        throw new Error("Este e-mail já está cadastrado para um mecânico ativo.");
+      }
+      if (registroExistente) {
+        const { error: restaurarErr } = await supabaseAdmin
+          .from("mecanicos")
+          .update({ nome: data.nome, telefone: data.telefone, email, ativo: true, deleted_at: null })
+          .eq("id", registroExistente.id);
+        if (restaurarErr) throw new Error(restaurarErr.message);
+        const { error: senhaErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          password: data.senha,
+          user_metadata: { nome: data.nome, telefone: data.telefone, role: "mecanico" },
+        });
+        if (senhaErr) throw new Error(senhaErr.message);
+        return { id: userId };
+      }
+      throw new Error("Este e-mail já pertence a uma conta sem cadastro de mecânico. Use outro e-mail.");
+    }
+
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-      email: data.email,
+      email,
       password: data.senha,
       email_confirm: true,
       user_metadata: { nome: data.nome, telefone: data.telefone, role: "mecanico" },
     });
     if (createErr) throw new Error(createErr.message);
 
-    const userId = created.user?.id;
+    userId = created.user?.id;
     if (!userId) throw new Error("Falha ao criar usuário do mecânico.");
 
     const { error: mecErr } = await supabaseAdmin.from("mecanicos").insert({
       nome: data.nome,
       telefone: data.telefone,
-      email: data.email,
+      email,
       user_id: userId,
     });
     if (mecErr) {
-      // Reverte a criação do login se não conseguirmos criar o registro do mecânico,
-      // para não deixar uma conta "órfã" sem vínculo com a equipe.
       await supabaseAdmin.auth.admin.deleteUser(userId);
       throw new Error(mecErr.message);
     }

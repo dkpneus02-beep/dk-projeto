@@ -23,8 +23,10 @@ export type Database = {
           iniciado_at: string | null
           concluido_at: string | null
           mecanico_id: string | null
+          mao_de_obra: number
           nome: string
           peca_id: string | null
+          preco_peca: number
           quantidade: number
           retorno_meses: number
           status: string
@@ -38,8 +40,10 @@ export type Database = {
           iniciado_at?: string | null
           concluido_at?: string | null
           mecanico_id?: string | null
+          mao_de_obra?: number
           nome: string
           peca_id?: string | null
+          preco_peca?: number
           quantidade?: number
           retorno_meses?: number
           status?: string
@@ -53,8 +57,10 @@ export type Database = {
           iniciado_at?: string | null
           concluido_at?: string | null
           mecanico_id?: string | null
+          mao_de_obra?: number
           nome?: string
           peca_id?: string | null
+          preco_peca?: number
           quantidade?: number
           retorno_meses?: number
           status?: string

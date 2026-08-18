@@ -105,7 +105,13 @@ function NotificacoesInternas() {
     queryKey: ["notificacao-servicos-abertos"],
     enabled: gerente,
     queryFn: async () => {
-      const { data, error } = await db.from("atendimento_servicos").select("id, nome, atendimento_id, atendimentos(numero, cliente_nome, placa)").neq("status", "concluido").order("created_at", { ascending: false }).limit(100);
+      const { data, error } = await db
+        .from("atendimento_servicos")
+        .select("id, nome, atendimento_id, atendimentos!inner(numero, cliente_nome, placa, deleted_at)")
+        .neq("status", "concluido")
+        .is("atendimentos.deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(100);
       if (error) throw error;
       return data ?? [];
     },
