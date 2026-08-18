@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { brl, matches } from "@/lib/format";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
+import { BarcodeCameraDialog } from "@/components/BarcodeCameraDialog";
 
 export const Route = createFileRoute("/pecas")({
   head: () => ({
@@ -57,6 +58,16 @@ function Pecas() {
   const [busca, setBusca] = useState("");
   const [tab, setTab] = useState("todos");
   const [edit, setEdit] = useState<null | (typeof vazio & { id?: string })>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [favoritos, setFavoritos] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      setFavoritos(JSON.parse(localStorage.getItem("dk-pneus-pecas-favoritas") ?? "[]") as string[]);
+    } catch {
+      setFavoritos([]);
+    }
+  }, []);
 
   const { data } = useQuery({
     queryKey: ["pecas"],
@@ -75,20 +86,41 @@ function Pecas() {
     () =>
       (data ?? []).filter(
         (p) =>
-          (tab === "todos" || p.tipo === tab) &&
-          matches(busca, [p.nome, p.sku, p.marca, p.medida]),
+          (tab === "todos" || (tab === "favoritos" ? favoritos.includes(p.id) : p.tipo === tab)) &&
+          matches(busca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
       ),
-    [data, busca, tab],
+    [data, busca, tab, favoritos],
   );
 
-  // Leitor físico de código de barras (USB/Bluetooth): ao ler, joga o
-  // código direto na busca por SKU — sem precisar clicar em nada.
-  useBarcodeScanner((codigo) => {
+  const aplicarCodigo = (codigo: string) => {
     setBusca(codigo);
-    const achada = (data ?? []).find((p) => p.sku === codigo);
-    if (achada) toast.success(`Peça encontrada: ${achada.nome}`);
-    else toast.info(`Nenhuma peça com o código "${codigo}" — use "Nova peça" para cadastrar.`);
-  });
+    const achada = (data ?? []).find((p) => p.sku?.toLowerCase() === codigo.toLowerCase());
+    if (achada) {
+      toast.success(`Peça encontrada: ${achada.nome}`);
+      setEdit(achada ? {
+        id: achada.id,
+        sku: achada.sku ?? "",
+        nome: achada.nome,
+        marca: achada.marca ?? "",
+        tipo: achada.tipo,
+        estoque: Number(achada.estoque),
+        estoque_minimo: Number(achada.estoque_minimo),
+        preco_custo: Number(achada.preco_custo),
+        margem: Number(achada.margem),
+        preco_venda: Number(achada.preco_venda),
+        medida: achada.medida ?? "",
+        indice_carga: achada.indice_carga ?? "",
+        simbolo_velocidade: achada.simbolo_velocidade ?? "",
+        modelo_desenho: achada.modelo_desenho ?? "",
+        construcao: achada.construcao ?? "",
+      } : null);
+    } else {
+      toast.info(`Nenhuma peça com o código "${codigo}" — use "Novo item" para cadastrar.`);
+    }
+  };
+
+  // Leitor USB/Bluetooth: funciona como teclado e cai na mesma busca inteligente da câmera.
+  useBarcodeScanner(aplicarCodigo);
 
   const salvar = useMutation({
     mutationFn: async (p: typeof vazio & { id?: string }) => {
@@ -171,11 +203,15 @@ function Pecas() {
           placeholder="Buscar por nome, código, marca ou medida"
           className="max-w-sm"
         />
+        <Button variant="outline" onClick={() => setCameraOpen(true)}>
+          <i className="fa-solid fa-camera" /> Ler pela câmera
+        </Button>
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="todos">Todos</TabsTrigger>
             <TabsTrigger value="peca">Peças</TabsTrigger>
             <TabsTrigger value="pneu">Pneus</TabsTrigger>
+            <TabsTrigger value="favoritos">Favoritos</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -213,7 +249,20 @@ function Pecas() {
                 <td className="num p-3">{Number(p.margem)}%</td>
                 <td className="num p-3 font-semibold">{brl(p.preco_venda)}</td>
                 <td className="p-3 text-right">
-                  <button className="mr-3 text-muted-foreground hover:text-foreground" onClick={() => abrir(p)}>
+                  <button
+                    className="mr-3 text-muted-foreground hover:text-foreground"
+                    title="Favoritar item"
+                    onClick={() => {
+                      const proximo = favoritos.includes(p.id)
+                        ? favoritos.filter((id) => id !== p.id)
+                        : [...favoritos, p.id];
+                      setFavoritos(proximo);
+                      localStorage.setItem("dk-pneus-pecas-favoritas", JSON.stringify(proximo));
+                    }}
+                  >
+                    <i className={`${favoritos.includes(p.id) ? "fa-solid" : "fa-regular"} fa-star`} />
+                  </button>
+                  <button className="mr-3 text-muted-foreground hover:text-foreground" onClick={() => abrir(p)} title="Editar item">
                     <i className="fa-solid fa-pen" />
                   </button>
                   <ConfirmActionDialog
@@ -249,6 +298,12 @@ function Pecas() {
           </tbody>
         </table>
       </div>
+
+      <BarcodeCameraDialog
+        open={cameraOpen}
+        onOpenChange={setCameraOpen}
+        onDetected={aplicarCodigo}
+      />
 
       {edit && (
         <Dialog open onOpenChange={() => setEdit(null)}>

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { brl, d, dt, FORMAS_PAGAMENTO, statusLabel, whatsappLink } from "@/lib/format";
+import { brl, d, dt, FORMAS_PAGAMENTO, matches, statusLabel, whatsappLink } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
 import { isGerente, canEditServico } from "@/lib/permissions";
 import { printReceipt } from "@/lib/receipt";
@@ -739,32 +739,87 @@ function ChecklistServicos({
   }) => void;
 }) {
   const [outro, setOutro] = useState("");
+  const [buscaServico, setBuscaServico] = useState("");
+  const [favoritos, setFavoritos] = useState<string[]>([]);
+  const rapidos = ["Alinhamento", "Balanceamento", "Troca de óleo", "Troca de pneu"];
+
+  useEffect(() => {
+    try {
+      setFavoritos(JSON.parse(localStorage.getItem("dk-pneus-servicos-favoritos") ?? "[]") as string[]);
+    } catch {
+      setFavoritos([]);
+    }
+  }, []);
+
+  const disponiveis = catalogo.filter((c) => matches(buscaServico, [c.nome]));
+  const adicionarRapido = (nome: string) => {
+    const c = catalogo.find((item) => item.nome.toLowerCase() === nome.toLowerCase());
+    if (!c || jaAdicionados.includes(c.nome)) return;
+    onAdd({
+      nome: c.nome,
+      retorno_meses: c.retorno_meses,
+      garantia_km: c.garantia_km,
+      valor: Number(c.preco_padrao),
+    });
+  };
+
   return (
     <div className="mt-6 border-t pt-4">
       <p className="mb-3 text-sm font-medium">
         <i className="fa-solid fa-list-check mr-2 text-primary" /> Checklist de serviços
       </p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {rapidos.map((nome) => (
+          <Button key={nome} type="button" variant="outline" size="sm" onClick={() => adicionarRapido(nome)}>
+            <i className="fa-solid fa-bolt" /> {nome}
+          </Button>
+        ))}
+      </div>
+      <Input
+        value={buscaServico}
+        onChange={(e) => setBuscaServico(e.target.value)}
+        placeholder="Buscar serviço por nome..."
+        className="mb-3"
+      />
       <div className="grid gap-2 sm:grid-cols-2">
-        {catalogo.map((c) => {
+        {disponiveis.map((c) => {
           const marcado = jaAdicionados.includes(c.nome);
+          const favorito = favoritos.includes(c.id);
           return (
-            <label key={c.id} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={marcado}
-                disabled={marcado}
-                onCheckedChange={() =>
-                  onAdd({
-                    nome: c.nome,
-                    retorno_meses: c.retorno_meses,
-                    garantia_km: c.garantia_km,
-                    valor: Number(c.preco_padrao),
-                  })
-                }
-              />
-              {c.nome}
-            </label>
+            <div key={c.id} className="flex items-center gap-2 text-sm">
+              <label className="flex min-w-0 flex-1 items-center gap-2">
+                <Checkbox
+                  checked={marcado}
+                  disabled={marcado}
+                  onCheckedChange={() =>
+                    onAdd({
+                      nome: c.nome,
+                      retorno_meses: c.retorno_meses,
+                      garantia_km: c.garantia_km,
+                      valor: Number(c.preco_padrao),
+                    })
+                  }
+                />
+                <span className="truncate">{c.nome}</span>
+              </label>
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-primary"
+                title={favorito ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                onClick={() => {
+                  const proximo = favorito ? favoritos.filter((id) => id !== c.id) : [...favoritos, c.id];
+                  setFavoritos(proximo);
+                  localStorage.setItem("dk-pneus-servicos-favoritos", JSON.stringify(proximo));
+                }}
+              >
+                <i className={`${favorito ? "fa-solid" : "fa-regular"} fa-star`} />
+              </button>
+            </div>
           );
         })}
+        {disponiveis.length === 0 && (
+          <p className="text-sm text-muted-foreground">Nenhum serviço encontrado.</p>
+        )}
       </div>
       <div className="mt-4 flex gap-2">
         <Input
