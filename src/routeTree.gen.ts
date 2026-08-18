@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AvisosRouteImport } from './routes/avisos'
+import { Route as BackupRouteImport } from './routes/backup'
 import { Route as CaixaRouteImport } from './routes/caixa'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as HistoricoRouteImport } from './routes/historico'
@@ -37,6 +38,11 @@ const AuthRoute = AuthRouteImport.update({
 const AvisosRoute = AvisosRouteImport.update({
   id: '/avisos',
   path: '/avisos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BackupRoute = BackupRouteImport.update({
+  id: '/backup',
+  path: '/backup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CaixaRoute = CaixaRouteImport.update({
@@ -99,6 +105,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/avisos': typeof AvisosRoute
+  '/backup': typeof BackupRoute
   '/caixa': typeof CaixaRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/historico': typeof HistoricoRoute
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/avisos': typeof AvisosRoute
+  '/backup': typeof BackupRoute
   '/caixa': typeof CaixaRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/historico': typeof HistoricoRoute
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/avisos': typeof AvisosRoute
+  '/backup': typeof BackupRoute
   '/caixa': typeof CaixaRoute
   '/configuracoes': typeof ConfiguracoesRoute
   '/historico': typeof HistoricoRoute
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/avisos'
+    | '/backup'
     | '/caixa'
     | '/configuracoes'
     | '/historico'
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/avisos'
+    | '/backup'
     | '/caixa'
     | '/configuracoes'
     | '/historico'
@@ -182,6 +193,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/avisos'
+    | '/backup'
     | '/caixa'
     | '/configuracoes'
     | '/historico'
@@ -199,6 +211,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   AvisosRoute: typeof AvisosRoute
+  BackupRoute: typeof BackupRoute
   CaixaRoute: typeof CaixaRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
   HistoricoRoute: typeof HistoricoRoute
@@ -233,6 +246,13 @@ declare module '@tanstack/react-router' {
       path: '/avisos'
       fullPath: '/avisos'
       preLoaderRoute: typeof AvisosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/backup': {
+      id: '/backup'
+      path: '/backup'
+      fullPath: '/backup'
+      preLoaderRoute: typeof BackupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/caixa': {
@@ -319,6 +339,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   AvisosRoute: AvisosRoute,
+  BackupRoute: BackupRoute,
   CaixaRoute: CaixaRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
   HistoricoRoute: HistoricoRoute,
