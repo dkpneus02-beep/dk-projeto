@@ -16,7 +16,8 @@ export type NavKey =
   | "mecanicos"
   | "notificacoes"
   | "avisos"
-  | "configuracoes";
+  | "configuracoes"
+  | "relatorios";
 
 /** Rotas que o mecânico pode abrir diretamente. */
 const MECANICO_PREFIXES = ["/patio", "/historico", "/atendimento"];
@@ -41,6 +42,7 @@ const NAV_GERENTE: NavKey[] = [
   "notificacoes",
   "avisos",
   "configuracoes",
+  "relatorios",
 ];
 
 const NAV_MECANICO: NavKey[] = ["patio", "historico"];
