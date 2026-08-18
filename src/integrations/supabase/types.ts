@@ -87,6 +87,8 @@ export type Database = {
           cliente_telefone: string | null
           cor: string | null
           created_at: string
+          criado_por: string | null
+          criado_por_nome: string | null
           deleted_at: string | null
           desconto: number
           entrada_at: string
@@ -117,6 +119,8 @@ export type Database = {
           cliente_telefone?: string | null
           cor?: string | null
           created_at?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
           deleted_at?: string | null
           desconto?: number
           entrada_at?: string
@@ -147,6 +151,8 @@ export type Database = {
           cliente_telefone?: string | null
           cor?: string | null
           created_at?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
           deleted_at?: string | null
           desconto?: number
           entrada_at?: string

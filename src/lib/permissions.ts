@@ -52,3 +52,18 @@ export function navFor(role: Role | null): NavKey[] {
 export function isGerente(role: Role | null): boolean {
   return role === "gerente";
 }
+
+/**
+ * Um serviço de OS só pode ter seu status alterado pelo mecânico se ele for
+ * o responsável atribuído. Gerente sempre pode. Serviço ainda sem mecânico
+ * atribuído fica travado para o mecânico até o gerente atribuir alguém —
+ * essa mesma regra também é aplicada no banco (RLS + trigger).
+ */
+export function canEditServico(
+  role: Role | null,
+  servicoMecanicoId: string | null,
+  meuMecanicoId: string | null,
+): boolean {
+  if (isGerente(role)) return true;
+  return !!servicoMecanicoId && servicoMecanicoId === meuMecanicoId;
+}

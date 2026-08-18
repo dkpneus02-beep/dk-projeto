@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { brl, d, dt, FORMAS_PAGAMENTO, statusLabel, whatsappLink } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
-import { isGerente } from "@/lib/permissions";
+import { isGerente, canEditServico } from "@/lib/permissions";
 import { printReceipt } from "@/lib/receipt";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import {
@@ -57,7 +57,7 @@ function AtendimentoPage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { role, user, nome } = useAuth();
+  const { role, user, nome, mecanicoId } = useAuth();
   const gerente = isGerente(role);
   const [finalizando, setFinalizando] = useState(false);
   const [reciboPergunta, setReciboPergunta] = useState<null | {
@@ -126,7 +126,11 @@ function AtendimentoPage() {
     mutationFn: async () => {
       const { error } = await supabase
         .from("atendimentos")
-        .update({ status: "aguardando_gerente", pronto_at: new Date().toISOString(), pronto_por: user?.id ?? null })
+        .update({
+          status: "aguardando_gerente",
+          pronto_at: new Date().toISOString(),
+          pronto_por: user?.id ?? null,
+        })
         .eq("id", id);
       if (error) throw error;
     },
@@ -138,7 +142,12 @@ function AtendimentoPage() {
   });
 
   const addServico = useMutation({
-    mutationFn: async (payload: { nome: string; retorno_meses: number; garantia_km: number | null; valor: number }) => {
+    mutationFn: async (payload: {
+      nome: string;
+      retorno_meses: number;
+      garantia_km: number | null;
+      valor: number;
+    }) => {
       const { error } = await supabase.from("atendimento_servicos").insert({
         atendimento_id: id,
         nome: payload.nome,
@@ -153,7 +162,13 @@ function AtendimentoPage() {
   });
 
   const updServico = useMutation({
-    mutationFn: async ({ sid, patch }: { sid: string; patch: TablesUpdate<"atendimento_servicos"> }) => {
+    mutationFn: async ({
+      sid,
+      patch,
+    }: {
+      sid: string;
+      patch: TablesUpdate<"atendimento_servicos">;
+    }) => {
       const { error } = await supabase.from("atendimento_servicos").update(patch).eq("id", sid);
       if (error) throw error;
     },
@@ -207,7 +222,7 @@ function AtendimentoPage() {
             onClick={() => marcarPronto.mutate()}
           >
             {marcarPronto.isPending && <i className="fa-solid fa-circle-notch fa-spin" />}
-            <i className="fa-solid fa-flag-checkered" /> Marcar serviço como pronto
+            <i className="fa-solid fa-flag-checkered" /> Enviar para conferência do gerente
           </Button>
         )}
         {!finalizado && gerente && (
@@ -223,8 +238,11 @@ function AtendimentoPage() {
           <div>
             <p className="font-semibold">Aguardando finalização do gerente</p>
             <p className="text-sm text-muted-foreground">
-              O mecânico marcou este atendimento como pronto{data?.pronto_at ? ` em ${dt(data.pronto_at)}` : ""}.
-              {gerente ? " Confira e clique em \"Finalizar e entregar\"." : " O gerente foi notificado."}
+              O mecânico marcou este atendimento como pronto
+              {data?.pronto_at ? ` em ${dt(data.pronto_at)}` : ""}.
+              {gerente
+                ? ' Confira e clique em "Finalizar e entregar".'
+                : " O gerente foi notificado."}
             </p>
           </div>
         </div>
@@ -288,11 +306,13 @@ function AtendimentoPage() {
                       )}
                     </div>
                   </div>
-                  {!finalizado && (
+                  {!finalizado && gerente && (
                     <div className="mt-3 grid gap-2 sm:grid-cols-3">
                       <Select
                         value={s.status}
-                        onValueChange={(v) => updServico.mutate({ sid: s.id, patch: { status: v } })}
+                        onValueChange={(v) =>
+                          updServico.mutate({ sid: s.id, patch: { status: v } })
+                        }
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -338,11 +358,49 @@ function AtendimentoPage() {
                       />
                     </div>
                   )}
+                  {!finalizado && !gerente && (
+                    <div className="mt-3 space-y-2">
+                      {/* Mecânico não vê nem altera responsável/valor — só o status do
+                          próprio serviço. Campos abaixo são somente leitura (a trava
+                          real está no banco: RLS + trigger bloqueiam a escrita). */}
+                      <Select
+                        value={s.status}
+                        disabled={!canEditServico(role, s.mecanico_id, mecanicoId)}
+                        onValueChange={(v) =>
+                          updServico.mutate({ sid: s.id, patch: { status: v } })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aguardando">Aguardando</SelectItem>
+                          <SelectItem value="em_execucao">Em execução</SelectItem>
+                          <SelectItem value="concluido">Concluído</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {!canEditServico(role, s.mecanico_id, mecanicoId) && (
+                        <p className="text-xs text-muted-foreground">
+                          <i className="fa-solid fa-lock mr-1" />
+                          {s.mecanico_id
+                            ? "Atribuído a outro mecânico — aguarde o gerente."
+                            : "Ainda sem mecânico atribuído — peça ao gerente."}
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        Responsável:{" "}
+                        <span className="font-medium text-foreground">
+                          {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ??
+                            "sem mecânico atribuído"}
+                        </span>{" "}
+                        · <span className="num">{brl(s.valor)}</span>
+                      </p>
+                    </div>
+                  )}
                   {finalizado && (
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Mecânico:{" "}
-                      {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ?? "—"} ·{" "}
-                      <span className="num">{brl(s.valor)}</span>
+                      Mecânico: {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ?? "—"}{" "}
+                      · <span className="num">{brl(s.valor)}</span>
                     </p>
                   )}
                 </div>
@@ -436,7 +494,10 @@ function AtendimentoPage() {
 
           <div className="card-surface space-y-2 p-5">
             <h2 className="font-display text-xl font-bold uppercase">Resumo</h2>
-            <Info label="Serviços" value={`${servicos.filter((s) => s.status === "concluido").length}/${servicos.length} concluídos`} />
+            <Info
+              label="Serviços"
+              value={`${servicos.filter((s) => s.status === "concluido").length}/${servicos.length} concluídos`}
+            />
             <Info label="Total" value={brl(total)} />
             {finalizado && (
               <>
@@ -508,12 +569,17 @@ function AtendimentoPage() {
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={() => {
-                  printReceipt(reciboPergunta.atendimento, reciboPergunta.servicos, reciboPergunta.pagamentos, {
-                    nome_oficina: config?.nome_oficina || "DK Auto Center",
-                    endereco: config?.endereco ?? "",
-                    telefone: config?.telefone ?? "",
-                    cnpj: config?.cnpj ?? "",
-                  });
+                  printReceipt(
+                    reciboPergunta.atendimento,
+                    reciboPergunta.servicos,
+                    reciboPergunta.pagamentos,
+                    {
+                      nome_oficina: config?.nome_oficina || "DK Auto Center",
+                      endereco: config?.endereco ?? "",
+                      telefone: config?.telefone ?? "",
+                      cnpj: config?.cnpj ?? "",
+                    },
+                  );
                   setReciboPergunta(null);
                   void navigate({ to: "/patio" });
                 }}
@@ -555,7 +621,9 @@ export function GarantiaTag({
       {ativa
         ? `Garantia ativa — faltam ${dias} dias (até ${d(ate)})`
         : `SERVIÇO FORA DA GARANTIA DESDE ${d(ate)}`}
-      {km ? ` · limite ${km.toLocaleString("pt-BR")} km${kmEntrada ? ` (entrada ${kmEntrada.toLocaleString("pt-BR")} km)` : ""}` : ""}
+      {km
+        ? ` · limite ${km.toLocaleString("pt-BR")} km${kmEntrada ? ` (entrada ${kmEntrada.toLocaleString("pt-BR")} km)` : ""}`
+        : ""}
     </p>
   );
 }
@@ -565,9 +633,20 @@ function ChecklistServicos({
   jaAdicionados,
   onAdd,
 }: {
-  catalogo: { id: string; nome: string; preco_padrao: number; retorno_meses: number; garantia_km: number | null }[];
+  catalogo: {
+    id: string;
+    nome: string;
+    preco_padrao: number;
+    retorno_meses: number;
+    garantia_km: number | null;
+  }[];
   jaAdicionados: string[];
-  onAdd: (i: { nome: string; retorno_meses: number; garantia_km: number | null; valor: number }) => void;
+  onAdd: (i: {
+    nome: string;
+    retorno_meses: number;
+    garantia_km: number | null;
+    valor: number;
+  }) => void;
 }) {
   const [outro, setOutro] = useState("");
   return (
@@ -769,7 +848,10 @@ function FinalizarDialog({
 
         <div className="rounded-md border">
           {servicos.map((s) => (
-            <div key={s.id} className="flex justify-between border-b px-3 py-2 text-sm last:border-0">
+            <div
+              key={s.id}
+              className="flex justify-between border-b px-3 py-2 text-sm last:border-0"
+            >
               <span>
                 {s.nome}
                 <span className="text-muted-foreground">
