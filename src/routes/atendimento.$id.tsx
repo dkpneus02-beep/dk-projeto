@@ -179,7 +179,10 @@ function AtendimentoPage() {
       });
       if (error) throw error;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["atendimento", id] }),
+    onSuccess: () => {
+      toast.success("Serviço adicionado e total da OS recalculado.");
+      void qc.invalidateQueries({ queryKey: ["atendimento", id] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -194,7 +197,11 @@ function AtendimentoPage() {
       const { error } = await supabase.from("atendimento_servicos").update(patch).eq("id", sid);
       if (error) throw error;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["atendimento", id] }),
+    onSuccess: () => {
+      toast.success("Serviço atualizado e total da OS recalculado.");
+      void qc.invalidateQueries({ queryKey: ["atendimento", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const delServico = useMutation({
@@ -202,7 +209,11 @@ function AtendimentoPage() {
       const { error } = await supabase.from("atendimento_servicos").delete().eq("id", sid);
       if (error) throw error;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["atendimento", id] }),
+    onSuccess: () => {
+      toast.success("Serviço excluído e total da OS recalculado.");
+      void qc.invalidateQueries({ queryKey: ["atendimento", id] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const salvarAtendimento = useMutation({

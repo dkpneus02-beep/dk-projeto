@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -43,25 +44,61 @@ export const Route = createFileRoute("/notificacoes")({
   component: Notificacoes,
 });
 
-type Retorno = Tables<"notificacoes_retorno">;
+type Retorno = Tables<"notificacoes_retorno"> & { excluido_at?: string | null };
+type ContatoRetorno = {
+  id: string;
+  retorno_id: string;
+  resultado: string;
+  observacao: string | null;
+  contatado_em: string;
+  contatado_por_nome: string | null;
+};
+
+const resultadoContatoLabel: Record<string, string> = {
+  contatado_agendou: "Cliente contatado e agendou",
+  contatado_nao_quis: "Cliente contatado, mas não quis",
+  nao_atendeu: "Não atendeu",
+  numero_invalido: "Número inválido",
+  sem_contato: "Ainda não contatado",
+  outro: "Outro resultado",
+};
+
+function dtCurta(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+}
 
 function Notificacoes() {
   const qc = useQueryClient();
-  const { role } = useAuth();
+  const { role, user, nome } = useAuth();
   const gerente = isGerente(role);
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState("pendente");
   const [somenteVencidos, setSomenteVencidos] = useState(false);
   const [editando, setEditando] = useState<Retorno | null>(null);
+  const [contatoAberto, setContatoAberto] = useState<Retorno | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["retornos"],
     queryFn: async () => {
-      const { data: rows, error } = await supabase
+      const { data: rows, error } = await (supabase as any)
         .from("notificacoes_retorno")
         .select("*")
+        .is("excluido_at", null)
         .order("vencimento", { ascending: true })
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return rows ?? [];
+    },
+  });
+
+  const { data: contatos } = useQuery<ContatoRetorno[]>({
+    queryKey: ["retorno-contatos"],
+    enabled: gerente,
+    queryFn: async () => {
+      const { data: rows, error } = await (supabase as any)
+        .from("notificacoes_retorno_contatos")
+        .select("id, retorno_id, resultado, observacao, contatado_em, contatado_por_nome")
+        .order("contatado_em", { ascending: false });
       if (error) throw error;
       return rows ?? [];
     },
@@ -75,6 +112,41 @@ function Notificacoes() {
     onSuccess: (_, variables) => {
       toast.success(variables.status === "concluido" ? "Retorno marcado como resolvido" : "Retorno reaberto");
       void qc.invalidateQueries({ queryKey: ["retornos"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const excluir = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from("notificacoes_retorno")
+        .update({ excluido_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Retorno ocultado com segurança.");
+      void qc.invalidateQueries({ queryKey: ["retornos"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const registrarContato = useMutation({
+    mutationFn: async ({ retornoId, resultado, observacao }: { retornoId: string; resultado: string; observacao: string }) => {
+      if (!user?.id) throw new Error("Sessão do gerente não encontrada.");
+      const { error } = await (supabase as any).from("notificacoes_retorno_contatos").insert({
+        retorno_id: retornoId,
+        resultado,
+        observacao: observacao.trim() || null,
+        contatado_por: user.id,
+        contatado_por_nome: nome || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Contato registrado com data, horário e responsável.");
+      setContatoAberto(null);
+      void qc.invalidateQueries({ queryKey: ["retorno-contatos"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -162,6 +234,14 @@ function Notificacoes() {
                 <p className="text-sm text-muted-foreground">Veículo: {n.veiculo || "não informado"}</p>
                 <p className="text-sm text-muted-foreground">Serviço: {n.servico} · Data prevista: {d(n.vencimento)}</p>
                 {n.telefone && <p className="text-xs text-muted-foreground">Telefone: {n.telefone}</p>}
+                {(() => {
+                  const ultimoContato = (contatos ?? []).find((contato) => contato.retorno_id === n.id);
+                  return ultimoContato ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Último contato: {resultadoContatoLabel[ultimoContato.resultado] ?? ultimoContato.resultado} em {dtCurta(ultimoContato.contatado_em)}{ultimoContato.contatado_por_nome ? ` por ${ultimoContato.contatado_por_nome}` : ""}
+                    </p>
+                  ) : null;
+                })()}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {pendente && n.telefone && (
@@ -181,6 +261,11 @@ function Notificacoes() {
                   </Button>
                 )}
                 {gerente && (
+                  <Button variant="outline" size="sm" onClick={() => setContatoAberto(n)}>
+                    <i className="fa-solid fa-phone" /> Registrar contato
+                  </Button>
+                )}
+                {gerente && (
                   <Button
                     size="sm"
                     variant={pendente ? "ghost" : "outline"}
@@ -189,6 +274,16 @@ function Notificacoes() {
                   >
                     <i className={`fa-solid ${pendente ? "fa-check" : "fa-rotate-left"}`} /> {pendente ? "Resolver" : "Reabrir"}
                   </Button>
+                )}
+                {gerente && (
+                  <ConfirmActionDialog
+                    trigger={<button className="text-muted-foreground hover:text-destructive" title="Excluir retorno de teste"><i className="fa-solid fa-trash-can" /></button>}
+                    title="Excluir retorno"
+                    description={<>Tem certeza absoluta de que deseja ocultar o retorno de <strong className="text-foreground">{n.cliente_nome}</strong>? O registro não será apagado do banco, apenas retirado da lista.</>}
+                    confirmLabel="Sim, excluir retorno"
+                    destructive
+                    onConfirm={() => excluir.mutateAsync(n.id)}
+                  />
                 )}
               </div>
             </div>
@@ -202,6 +297,16 @@ function Notificacoes() {
         )}
       </div>
 
+      {gerente && contatoAberto && (
+        <RegistrarContatoDialog
+          retorno={contatoAberto}
+          open
+          saving={registrarContato.isPending}
+          onClose={() => setContatoAberto(null)}
+          onSave={(resultado, observacao) => registrarContato.mutate({ retornoId: contatoAberto.id, resultado, observacao })}
+        />
+      )}
+
       {gerente && editando && (
         <EditarRetornoDialog
           retorno={editando}
@@ -212,6 +317,57 @@ function Notificacoes() {
         />
       )}
     </AppShell>
+  );
+}
+
+function RegistrarContatoDialog({
+  retorno,
+  open,
+  saving,
+  onClose,
+  onSave,
+}: {
+  retorno: Retorno;
+  open: boolean;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (resultado: string, observacao: string) => void;
+}) {
+  const [resultado, setResultado] = useState("sem_contato");
+  const [observacao, setObservacao] = useState("");
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="font-display text-2xl uppercase">Registrar contato</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {retorno.cliente_nome} · {retorno.telefone || "telefone não informado"}. A data, o horário e o usuário serão gravados automaticamente.
+        </p>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Resultado do contato</Label>
+            <Select value={resultado} onValueChange={setResultado}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(resultadoContatoLabel).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Observação do contato</Label>
+            <Textarea value={observacao} onChange={(event) => setObservacao(event.target.value)} placeholder="Ex.: Cliente informou que não deseja realizar o retorno neste momento." rows={4} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={() => onSave(resultado, observacao)} disabled={saving}>
+            {saving && <i className="fa-solid fa-circle-notch fa-spin" />} Salvar contato
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

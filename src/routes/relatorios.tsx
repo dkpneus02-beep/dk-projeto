@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { brl, dt } from "@/lib/format";
+import { brl } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/relatorios")({
@@ -24,7 +24,6 @@ type RelatorioData = {
   mecanicos: { id: string; nome: string }[];
   pecas: { id: string; nome: string; estoque: number; estoque_minimo: number; deleted_at: string | null }[];
   retornos: { id: string; cliente_nome: string; servico: string; vencimento: string; status: string }[];
-  auditoria: { id: number; tabela: string; acao: string; usuario_id: string | null; motivo: string | null; created_at: string }[];
 };
 
 function Relatorios() {
@@ -40,7 +39,7 @@ function Relatorios() {
     queryFn: async () => {
       const inicioIso = `${inicio}T00:00:00.000Z`;
       const fimIso = `${fim}T23:59:59.999Z`;
-      const [atendimentos, servicos, mecanicos, pecas, retornos, auditoria] = await Promise.all([
+      const [atendimentos, servicos, mecanicos, pecas, retornos] = await Promise.all([
         supabase
           .from("atendimentos")
           .select("id, numero, total, finalizado_at")
@@ -68,14 +67,9 @@ function Relatorios() {
           .lte("vencimento", fim)
           .order("vencimento", { ascending: true })
           .limit(200),
-        (supabase as any)
-          .from("audit_eventos")
-          .select("id, tabela, acao, usuario_id, motivo, created_at")
-          .order("created_at", { ascending: false })
-          .limit(100),
       ]);
 
-      const respostas = [atendimentos, servicos, mecanicos, pecas, retornos, auditoria];
+      const respostas = [atendimentos, servicos, mecanicos, pecas, retornos];
       const falha = respostas.find((resposta) => resposta.error)?.error;
       if (falha) throw falha;
 
@@ -85,7 +79,6 @@ function Relatorios() {
         mecanicos: mecanicos.data ?? [],
         pecas: pecas.data ?? [],
         retornos: retornos.data ?? [],
-        auditoria: auditoria.data ?? [],
       } as RelatorioData;
     },
   });
@@ -185,14 +178,6 @@ function Relatorios() {
         </section>
       </div>
 
-      <section className="card-surface overflow-x-auto p-5">
-        <h2 className="mb-3 font-display text-lg font-bold uppercase">Auditoria recente</h2>
-        <p className="mb-3 text-sm text-muted-foreground">Ações sensíveis registradas no Supabase, disponíveis apenas para o gerente.</p>
-        <table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Data</th><th className="p-2">Tabela</th><th className="p-2">Ação</th><th className="p-2">Usuário</th><th className="p-2">Motivo</th></tr></thead><tbody>
-          {(data?.auditoria ?? []).slice(0, 30).map((a) => <tr key={a.id} className="border-b last:border-0"><td className="p-2">{dt(a.created_at)}</td><td className="p-2">{a.tabela}</td><td className="p-2">{a.acao}</td><td className="p-2">{a.usuario_id ? `${a.usuario_id.slice(0, 8)}…` : "Sistema"}</td><td className="p-2">{a.motivo ?? "—"}</td></tr>)}
-          {!data?.auditoria.length && <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">Nenhum evento registrado ainda.</td></tr>}
-        </tbody></table>
-      </section>
     </AppShell>
   );
 }
