@@ -46,7 +46,7 @@ function Dashboard() {
           .order("pronto_at", { ascending: true }),
         supabase
           .from("atendimentos")
-          .select("id, total, finalizado_at")
+          .select("id, total, desconto, finalizado_at, atendimento_servicos(valor)")
           .eq("status", "finalizado")
           .gte("finalizado_at", `${hoje}T00:00:00`),
         supabase
@@ -72,7 +72,12 @@ function Dashboard() {
   const patio = data?.patio ?? [];
   const pendencias = data?.pendencias ?? [];
   const mecanicoNome = new Map((data?.mecanicos ?? []).map((m) => [m.id, m.nome]));
-  const faturamento = (data?.finalizados ?? []).reduce((s, a) => s + Number(a.total), 0);
+  const faturamento = (data?.finalizados ?? []).reduce((s, a) => {
+    const itens = ((a as typeof a & { atendimento_servicos?: { valor: number }[] }).atendimento_servicos ?? [])
+      .reduce((subtotal, servico) => subtotal + Number(servico.valor), 0);
+    const desconto = Number((a as typeof a & { desconto?: number | null }).desconto ?? 0);
+    return s + Math.max(itens - desconto, 0);
+  }, 0);
   const retornos = data?.retornos ?? [];
   const baixos = data?.pecas ?? [];
 

@@ -1,9 +1,11 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertas } from "@/hooks/useAlertas";
 import { Button } from "@/components/ui/button";
 import { isRouteAllowed, navFor, homeRouteFor, type NavKey } from "@/lib/permissions";
+import { supabase } from "@/integrations/supabase/client";
 
 const NAV_ITEMS: Record<NavKey, { to: string; icon: string; label: string }> = {
   dashboard: { to: "/", icon: "fa-gauge-high", label: "Dashboard" },
@@ -24,6 +26,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s: { location: { pathname: string } }) => s.location.pathname });
   useAlertas();
+  const { data: mensagensNaoLidas = 0 } = useQuery({
+    queryKey: ["notificacoes-nao-lidas", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { count, error } = await (supabase as any)
+        .from("notificacoes_internas")
+        .select("id", { count: "exact", head: true })
+        .eq("destinatario_user_id", user!.id)
+        .is("lido_at", null)
+        .is("excluido_at", null);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
   useEffect(() => {
     if (!loading && !user) void navigate({ to: "/auth" });
@@ -83,6 +99,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <i className={`fa-solid ${item.icon} w-4 text-center`} />
                 {item.label}
+                {item.to === "/notificacoes-internas" && mensagensNaoLidas > 0 && (
+                  <span className="ml-auto min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center text-[10px] font-bold text-destructive-foreground">
+                    {mensagensNaoLidas > 99 ? "99+" : mensagensNaoLidas}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -116,6 +137,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <i className={`fa-solid ${item.icon}`} />
               {item.label}
+              {item.to === "/notificacoes-internas" && mensagensNaoLidas > 0 && (
+                <span className="min-w-4 rounded-full bg-destructive px-1 text-center text-[9px] font-bold text-destructive-foreground">
+                  {mensagensNaoLidas > 99 ? "99+" : mensagensNaoLidas}
+                </span>
+              )}
             </Link>
           ))}
         </nav>

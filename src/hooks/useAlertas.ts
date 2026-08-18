@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -11,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
  */
 export function useAlertas() {
   const { user, role, nome } = useAuth();
+  const qc = useQueryClient();
   const ultimoRetorno = useRef(0);
 
   // --------------------------------------------------------------
@@ -38,11 +40,18 @@ export function useAlertas() {
     const iniciar = async () => {
       if (role === "gerente") {
         channel = supabase.channel(`realtime-gerente-${user.id}`);
+        channel.on("postgres_changes", { event: "*", schema: "public", table: "notificacoes_internas" }, () => {
+          void qc.invalidateQueries({ queryKey: ["notificacoes-internas"] });
+          void qc.invalidateQueries({ queryKey: ["notificacoes-nao-lidas", user.id] });
+        });
         // Etapa 1 -> 2: mecânico concluiu, gerente precisa finalizar/entregar.
         channel.on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "atendimentos" },
           (payload) => {
+            void qc.invalidateQueries({ queryKey: ["dashboard"] });
+            void qc.invalidateQueries({ queryKey: ["patio"] });
+            void qc.invalidateQueries({ queryKey: ["historico"] });
             const novo = payload.new as { status?: string; placa?: string; cliente_nome?: string };
             const antigo = payload.old as { status?: string };
             if (novo.status === "aguardando_gerente" && antigo.status !== "aguardando_gerente") {
@@ -58,6 +67,10 @@ export function useAlertas() {
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "atendimento_servicos" },
           (payload) => {
+            void qc.invalidateQueries({ queryKey: ["dashboard"] });
+            void qc.invalidateQueries({ queryKey: ["patio"] });
+            void qc.invalidateQueries({ queryKey: ["historico"] });
+            void qc.invalidateQueries({ queryKey: ["atendimento"] });
             const novo = payload.new as { status?: string; nome?: string };
             const antigo = payload.old as { status?: string };
             if (novo.status === "concluido" && antigo.status !== "concluido") {
@@ -76,6 +89,10 @@ export function useAlertas() {
           .maybeSingle();
         if (cancelado || !mec) return;
         channel = supabase.channel(`realtime-mecanico-${user.id}`);
+        channel.on("postgres_changes", { event: "*", schema: "public", table: "notificacoes_internas", filter: `destinatario_user_id=eq.${user.id}` }, () => {
+          void qc.invalidateQueries({ queryKey: ["notificacoes-internas"] });
+          void qc.invalidateQueries({ queryKey: ["notificacoes-nao-lidas", user.id] });
+        });
         channel.on(
           "postgres_changes",
           {
@@ -85,6 +102,9 @@ export function useAlertas() {
             filter: `mecanico_id=eq.${mec.id}`,
           },
           (payload) => {
+            void qc.invalidateQueries({ queryKey: ["dashboard"] });
+            void qc.invalidateQueries({ queryKey: ["patio"] });
+            void qc.invalidateQueries({ queryKey: ["atendimento"] });
             const novo = payload.new as { nome?: string };
             const antigo = payload.old as { mecanico_id?: string | null };
             if (!antigo.mecanico_id) {
