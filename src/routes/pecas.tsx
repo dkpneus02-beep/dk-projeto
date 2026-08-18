@@ -19,6 +19,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { brl, matches } from "@/lib/format";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 
 export const Route = createFileRoute("/pecas")({
   head: () => ({
@@ -215,12 +216,26 @@ function Pecas() {
                   <button className="mr-3 text-muted-foreground hover:text-foreground" onClick={() => abrir(p)}>
                     <i className="fa-solid fa-pen" />
                   </button>
-                  <button
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => remover.mutate(p.id)}
-                  >
-                    <i className="fa-solid fa-trash-can" />
-                  </button>
+                  <ConfirmActionDialog
+                    trigger={
+                      <button
+                        className="text-muted-foreground hover:text-destructive"
+                        title={`Excluir ${p.nome}`}
+                      >
+                        <i className="fa-solid fa-trash-can" />
+                      </button>
+                    }
+                    title="Excluir item do estoque"
+                    description={
+                      <>
+                        Tem certeza que deseja excluir <strong className="text-foreground">{p.nome}</strong>?
+                        O item será ocultado do estoque, mas os registros já usados em OS serão preservados.
+                      </>
+                    }
+                    confirmLabel="Excluir item"
+                    destructive
+                    onConfirm={() => remover.mutateAsync(p.id)}
+                  />
                 </td>
               </tr>
             ))}

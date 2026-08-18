@@ -323,13 +323,27 @@ function AtendimentoPage() {
                       >
                         {statusLabel[s.status]}
                       </Badge>
-                      {!finalizado && (
-                        <button
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => delServico.mutate(s.id)}
-                        >
-                          <i className="fa-solid fa-trash-can text-xs" />
-                        </button>
+                      {!finalizado && gerente && (
+                        <ConfirmActionDialog
+                          trigger={
+                            <button
+                              className="text-muted-foreground hover:text-destructive"
+                              title={`Excluir serviço ${s.nome}`}
+                            >
+                              <i className="fa-solid fa-trash-can text-xs" />
+                            </button>
+                          }
+                          title="Excluir serviço da OS"
+                          description={
+                            <>
+                              Tem certeza que deseja excluir <strong className="text-foreground">{s.nome}</strong> desta OS?
+                              Essa ação remove o serviço do atendimento.
+                            </>
+                          }
+                          confirmLabel="Excluir serviço"
+                          destructive
+                          onConfirm={() => delServico.mutateAsync(s.id)}
+                        />
                       )}
                     </div>
                   </div>
