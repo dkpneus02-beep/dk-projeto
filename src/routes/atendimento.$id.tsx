@@ -60,6 +60,8 @@ function AtendimentoPage() {
   const { role, user, nome, mecanicoId } = useAuth();
   const gerente = isGerente(role);
   const [finalizando, setFinalizando] = useState(false);
+  const [buscaPeca, setBuscaPeca] = useState("");
+  const [tipoPeca, setTipoPeca] = useState("todos");
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
     servicos: Parameters<typeof printReceipt>[1];
@@ -132,6 +134,15 @@ function AtendimentoPage() {
     [data],
   );
   const total = servicos.reduce((s, x) => s + Number(x.valor), 0);
+  const pecasFiltradas = useMemo(
+    () =>
+      (pecas ?? []).filter(
+        (p) =>
+          (tipoPeca === "todos" || p.tipo === tipoPeca || p.categoria === tipoPeca) &&
+          matches(buscaPeca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
+      ),
+    [pecas, buscaPeca, tipoPeca],
+  );
   const todosConcluidos = servicos.length > 0 && servicos.every((s) => s.status === "concluido");
   const finalizado = data?.status === "finalizado";
   const aguardandoGerente = data?.status === "aguardando_gerente";
@@ -398,9 +409,28 @@ function AtendimentoPage() {
                         }
                       />
                       <div className="grid gap-2 sm:col-span-3 sm:grid-cols-[1fr_120px]">
-                        <Select
-                          value={s.peca_id ?? "none"}
-                          onValueChange={(v) => {
+                        <div className="space-y-2">
+                          <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
+                            <Select value={tipoPeca} onValueChange={setTipoPeca}>
+                              <SelectTrigger aria-label="Filtrar estoque por tipo">
+                                <SelectValue placeholder="Tipo" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="todos">Todos os tipos</SelectItem>
+                                <SelectItem value="pneu">Pneus</SelectItem>
+                                <SelectItem value="peca">Peças e insumos</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              value={buscaPeca}
+                              onChange={(e) => setBuscaPeca(e.target.value)}
+                              placeholder="Buscar por nome, SKU, código, marca ou medida..."
+                              aria-label="Buscar item do estoque"
+                            />
+                          </div>
+                          <Select
+                            value={s.peca_id ?? "none"}
+                            onValueChange={(v) => {
                             const peca = (pecas ?? []).find((p) => p.id === v);
                             updServico.mutate({
                               sid: s.id,
@@ -417,13 +447,17 @@ function AtendimentoPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">Sem peça vinculada</SelectItem>
-                            {(pecas ?? []).map((p) => (
+                            {pecasFiltradas.map((p) => (
                               <SelectItem key={p.id} value={p.id}>
-                                {p.nome} · estoque {Number(p.estoque)}
+                                {p.nome} · {p.tipo === "pneu" ? "pneu" : "peça/insumo"} · estoque {Number(p.estoque)} · {brl(p.preco_venda)}
                               </SelectItem>
                             ))}
-                          </SelectContent>
-                        </Select>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {pecasFiltradas.length} item(ns) encontrado(s) · a baixa ocorre somente na finalização da OS
+                          </p>
+                        </div>
                         <Input
                           type="number"
                           min="0.01"
