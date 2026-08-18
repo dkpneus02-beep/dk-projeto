@@ -38,77 +38,61 @@ export function useAlertas() {
     let cancelado = false;
 
     const iniciar = async () => {
-      if (role === "gerente") {
-        channel = supabase.channel(`realtime-gerente-${user.id}`);
-        channel.on("postgres_changes", { event: "*", schema: "public", table: "notificacoes_internas" }, () => {
-          void qc.invalidateQueries({ queryKey: ["notificacoes-internas"] });
-          void qc.invalidateQueries({ queryKey: ["notificacoes-nao-lidas", user.id] });
-        });
-        // Etapa 1 -> 2: mecânico concluiu, gerente precisa finalizar/entregar.
-        channel.on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "atendimentos" },
-          (payload) => {
-            void qc.invalidateQueries({ queryKey: ["dashboard"] });
-            void qc.invalidateQueries({ queryKey: ["patio"] });
-            void qc.invalidateQueries({ queryKey: ["historico"] });
-            const novo = payload.new as { status?: string; placa?: string; cliente_nome?: string };
-            const antigo = payload.old as { status?: string };
-            if (payload.eventType === "UPDATE" && novo.status === "aguardando_gerente" && antigo.status !== "aguardando_gerente") {
-              notificar(
-                "Carro pronto para finalizar",
-                `${novo.placa ?? ""} — ${novo.cliente_nome ?? "cliente"} está aguardando finalização.`,
-              );
-            }
-          },
-        );
-        // Cenário B: mecânico criou/atualizou vistoria — reflete no painel do gerente.
-        channel.on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "atendimento_servicos" },
-          (payload) => {
-            void qc.invalidateQueries({ queryKey: ["dashboard"] });
-            void qc.invalidateQueries({ queryKey: ["patio"] });
-            void qc.invalidateQueries({ queryKey: ["historico"] });
-            void qc.invalidateQueries({ queryKey: ["atendimento"] });
-            const novo = payload.new as { status?: string; nome?: string };
-            const antigo = payload.old as { status?: string };
-            if (payload.eventType === "UPDATE" && novo.status === "concluido" && antigo.status !== "concluido") {
-              notificar("Serviço concluído", `"${novo.nome ?? "Item"}" foi marcado como feito.`);
-            }
-          },
-        );
-      }
-
+      let mecanicoId: string | null = null;
       if (role === "mecanico") {
-        // Cenário A: gerente atribuiu um serviço a este mecânico agora mesmo.
         const { data: mec } = await supabase
           .from("mecanicos")
           .select("id")
           .eq("user_id", user.id)
           .maybeSingle();
-        if (cancelado || !mec) return;
-        channel = supabase.channel(`realtime-mecanico-${user.id}`);
-        channel.on("postgres_changes", { event: "*", schema: "public", table: "notificacoes_internas", filter: `destinatario_user_id=eq.${user.id}` }, () => {
+        mecanicoId = mec?.id ?? null;
+      }
+      if (cancelado) return;
+
+      // Um único canal, sem filtros de Realtime: a segurança continua sendo feita
+      // pelas policies RLS; os filtros frágeis impediam alguns UPDATE/DELETE de chegar.
+      channel = supabase.channel(`dk-realtime-${user.id}`);
+      const invalidar = (tabela: string) => {
+        if (tabela === "notificacoes_internas") {
           void qc.invalidateQueries({ queryKey: ["notificacoes-internas"] });
           void qc.invalidateQueries({ queryKey: ["notificacoes-nao-lidas", user.id] });
-        });
+          return;
+        }
+        void qc.invalidateQueries({ queryKey: ["dashboard"] });
+        void qc.invalidateQueries({ queryKey: ["patio"] });
+        void qc.invalidateQueries({ queryKey: ["historico"] });
+        void qc.invalidateQueries({ queryKey: ["atendimento"] });
+      };
+
+      for (const tabela of ["atendimentos", "atendimento_servicos", "notificacoes_internas"] as const) {
         channel.on(
           "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "atendimento_servicos",
-            filter: `mecanico_id=eq.${mec.id}`,
-          },
+          { event: "*", schema: "public", table: tabela },
           (payload) => {
-            void qc.invalidateQueries({ queryKey: ["dashboard"] });
-            void qc.invalidateQueries({ queryKey: ["patio"] });
-            void qc.invalidateQueries({ queryKey: ["atendimento"] });
-            const novo = payload.new as { nome?: string; mecanico_id?: string | null };
-            const antigo = payload.old as { mecanico_id?: string | null };
-            if (payload.eventType === "UPDATE" && novo.mecanico_id === mec.id && antigo.mecanico_id !== mec.id) {
-              notificar("Novo serviço atribuído a você", novo.nome ?? "Confira seus atendimentos.");
+            invalidar(tabela);
+            if (role === "gerente" && tabela === "atendimentos") {
+              const novo = payload.new as { status?: string; placa?: string; cliente_nome?: string };
+              const antigo = payload.old as { status?: string };
+              if (payload.eventType === "UPDATE" && novo.status === "aguardando_gerente" && antigo.status !== "aguardando_gerente") {
+                notificar(
+                  "Carro pronto para finalizar",
+                  `${novo.placa ?? ""} — ${novo.cliente_nome ?? "cliente"} está aguardando finalização.`,
+                );
+              }
+            }
+            if (role === "gerente" && tabela === "atendimento_servicos") {
+              const novo = payload.new as { status?: string; nome?: string };
+              const antigo = payload.old as { status?: string };
+              if (payload.eventType === "UPDATE" && novo.status === "concluido" && antigo.status !== "concluido") {
+                notificar("Serviço concluído", `"${novo.nome ?? "Item"}" foi marcado como feito.`);
+              }
+            }
+            if (role === "mecanico" && tabela === "atendimento_servicos" && mecanicoId) {
+              const novo = payload.new as { nome?: string; mecanico_id?: string | null };
+              const antigo = payload.old as { mecanico_id?: string | null };
+              if (payload.eventType === "UPDATE" && novo.mecanico_id === mecanicoId && antigo.mecanico_id !== mecanicoId) {
+                notificar("Novo serviço atribuído a você", novo.nome ?? "Confira seus atendimentos.");
+              }
             }
           },
         );
@@ -116,6 +100,7 @@ export function useAlertas() {
 
       if (channel && !cancelado) {
         channel.subscribe((status, err) => {
+          console.info("[Realtime] status do canal", { role, status });
           if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
             console.error("[Realtime] falha no canal", { role, status, error: err });
           }
