@@ -60,6 +60,7 @@ function AtendimentoPage() {
   const { role, user, nome, mecanicoId } = useAuth();
   const gerente = isGerente(role);
   const [finalizando, setFinalizando] = useState(false);
+  const [editarDadosOpen, setEditarDadosOpen] = useState(false);
   const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
@@ -601,7 +602,14 @@ function AtendimentoPage() {
 
         <aside className="space-y-6">
           <div className="card-surface space-y-2 p-5">
-            <h2 className="font-display text-xl font-bold uppercase">Cliente</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-display text-xl font-bold uppercase">Cliente</h2>
+              {!finalizado && gerente && (
+                <Button variant="outline" size="sm" onClick={() => setEditarDadosOpen(true)}>
+                  <i className="fa-solid fa-pen-to-square" /> Editar
+                </Button>
+              )}
+            </div>
             <Info label="Nome" value={data.cliente_nome} />
             <Info label="Telefone" value={data.cliente_telefone || "—"} />
             <Info label="CPF" value={data.cliente_cpf || "—"} />
@@ -645,6 +653,18 @@ function AtendimentoPage() {
           </div>
         </aside>
       </div>
+
+      {!finalizado && gerente && (
+        <EditarDadosOsDialog
+          open={editarDadosOpen}
+          atendimento={data}
+          onClose={() => setEditarDadosOpen(false)}
+          onSave={async (patch) => {
+            await salvarAtendimento.mutateAsync(patch);
+            setEditarDadosOpen(false);
+          }}
+        />
+      )}
 
       {finalizando && gerente && (
         <FinalizarDialog
@@ -760,6 +780,111 @@ export function GarantiaTag({
         ? ` · limite ${km.toLocaleString("pt-BR")} km${kmEntrada ? ` (entrada ${kmEntrada.toLocaleString("pt-BR")} km)` : ""}`
         : ""}
     </p>
+  );
+}
+
+function EditarDadosOsDialog({
+  open,
+  atendimento,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  atendimento: {
+    cliente_nome: string;
+    cliente_telefone: string | null;
+    cliente_cpf: string | null;
+    placa: string;
+    fabricante: string | null;
+    modelo: string | null;
+    cor: string | null;
+    km: number | null;
+  };
+  onClose: () => void;
+  onSave: (patch: TablesUpdate<"atendimentos">) => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    cliente_nome: atendimento.cliente_nome,
+    cliente_telefone: atendimento.cliente_telefone ?? "",
+    cliente_cpf: atendimento.cliente_cpf ?? "",
+    placa: atendimento.placa,
+    fabricante: atendimento.fabricante ?? "",
+    modelo: atendimento.modelo ?? "",
+    cor: atendimento.cor ?? "",
+    km: atendimento.km == null ? "" : String(atendimento.km),
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      cliente_nome: atendimento.cliente_nome,
+      cliente_telefone: atendimento.cliente_telefone ?? "",
+      cliente_cpf: atendimento.cliente_cpf ?? "",
+      placa: atendimento.placa,
+      fabricante: atendimento.fabricante ?? "",
+      modelo: atendimento.modelo ?? "",
+      cor: atendimento.cor ?? "",
+      km: atendimento.km == null ? "" : String(atendimento.km),
+    });
+  }, [open, atendimento]);
+
+  const setField = (field: keyof typeof form, value: string) =>
+    setForm((current) => ({ ...current, [field]: value }));
+
+  const submit = async () => {
+    if (!form.cliente_nome.trim() || !form.placa.trim()) {
+      toast.error("Nome do cliente e placa são obrigatórios.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        cliente_nome: form.cliente_nome.trim(),
+        cliente_telefone: form.cliente_telefone.trim() || null,
+        cliente_cpf: form.cliente_cpf.trim() || null,
+        placa: form.placa.trim().toUpperCase(),
+        fabricante: form.fabricante.trim() || null,
+        modelo: form.modelo.trim() || null,
+        cor: form.cor.trim() || null,
+        km: form.km.trim() ? Number(form.km) : null,
+      });
+      toast.success("Dados da OS atualizados");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar os dados.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="font-display text-2xl uppercase">Editar dados da OS</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Use esta tela para corrigir dados digitados na abertura ou completar o CPF depois. O histórico da OS, estoque e pagamentos permanecem preservados.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2"><Label>Nome do cliente *</Label><Input value={form.cliente_nome} onChange={(e) => setField("cliente_nome", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Telefone</Label><Input value={form.cliente_telefone} onChange={(e) => setField("cliente_telefone", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>CPF</Label><Input value={form.cliente_cpf} onChange={(e) => setField("cliente_cpf", e.target.value)} placeholder="000.000.000-00" /></div>
+          <div className="space-y-1.5"><Label>Placa *</Label><Input value={form.placa} onChange={(e) => setField("placa", e.target.value.toUpperCase())} /></div>
+          <div className="space-y-1.5"><Label>Quilometragem</Label><Input type="number" min="0" value={form.km} onChange={(e) => setField("km", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Fabricante</Label><Input value={form.fabricante} onChange={(e) => setField("fabricante", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Modelo</Label><Input value={form.modelo} onChange={(e) => setField("modelo", e.target.value)} /></div>
+          <div className="space-y-1.5"><Label>Cor</Label><Input value={form.cor} onChange={(e) => setField("cor", e.target.value)} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving && <i className="fa-solid fa-circle-notch fa-spin" />}
+            Salvar alterações
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
