@@ -17,6 +17,7 @@ const NAV_ITEMS: Record<NavKey, { to: string; icon: string; label: string }> = {
   configuracoes: { to: "/configuracoes", icon: "fa-gear", label: "Configurações" },
   relatorios: { to: "/relatorios", icon: "fa-chart-line", label: "Relatórios" },
   "notificacoes-internas": { to: "/notificacoes-internas", icon: "fa-bell", label: "Notificações" },
+  backup: { to: "/backup", icon: "fa-database", label: "Backup" },
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
