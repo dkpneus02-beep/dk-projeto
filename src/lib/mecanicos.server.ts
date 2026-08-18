@@ -13,6 +13,19 @@ const criarMecanicoSchema = z.object({
   senha: z.string().min(6, "A senha precisa ter ao menos 6 caracteres"),
 });
 
+function normalizarNome(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("pt-BR");
+}
+
+function normalizarTelefone(value: string) {
+  return value.replace(/\D/g, "");
+}
+
 export const criarMecanico = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => criarMecanicoSchema.parse(data))
@@ -31,10 +44,36 @@ export const criarMecanico = createServerFn({ method: "POST" })
       throw new Error("Apenas o gerente pode cadastrar mecânicos.");
     }
 
-    const email = data.email.toLowerCase();
+    const email = data.email.trim().toLowerCase();
+    const nomeNormalizado = normalizarNome(data.nome);
+    const telefoneNormalizado = normalizarTelefone(data.telefone);
+    if (telefoneNormalizado.length < 10) {
+      throw new Error("Informe um telefone válido com DDD.");
+    }
+
+    const { data: registros, error: registrosErr } = await supabaseAdmin
+      .from("mecanicos")
+      .select("id, user_id, nome, telefone, email, deleted_at, ativo")
+      .limit(2000);
+    if (registrosErr) throw new Error(registrosErr.message);
+
+    const registroPorEmail = (registros ?? []).find((m) => m.email?.trim().toLowerCase() === email);
+    const registroPorNome = (registros ?? []).find(
+      (m) => m.id !== registroPorEmail?.id && normalizarNome(m.nome) === nomeNormalizado,
+    );
+    if (registroPorNome) {
+      throw new Error("Já existe um mecânico com este nome. Informe outro nome.");
+    }
+    const registroPorTelefone = (registros ?? []).find(
+      (m) => m.id !== registroPorEmail?.id && normalizarTelefone(m.telefone ?? "") === telefoneNormalizado,
+    );
+    if (registroPorTelefone) {
+      throw new Error("Já existe um mecânico com este telefone. Informe outro número.");
+    }
+
     const { data: lista, error: listaErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
     if (listaErr) throw new Error(listaErr.message);
-    const usuarioExistente = lista.users.find((u) => u.email?.toLowerCase() === email);
+    const usuarioExistente = lista.users.find((u) => u.email?.trim().toLowerCase() === email);
 
     let userId = usuarioExistente?.id;
     if (userId) {
