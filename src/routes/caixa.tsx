@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,8 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { brl, dt, FORMAS_PAGAMENTO } from "@/lib/format";
+import { brl, dt, FORMAS_PAGAMENTO, matches } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
+import { isGerente } from "@/lib/permissions";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 
 export const Route = createFileRoute("/caixa")({
@@ -32,8 +33,11 @@ export const Route = createFileRoute("/caixa")({
 
 function Caixa() {
   const qc = useQueryClient();
-  const { nome } = useAuth();
+  const { nome, role } = useAuth();
+  const gerente = isGerente(role);
   const [valorInicial, setValorInicial] = useState(0);
+  const [buscaMov, setBuscaMov] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState("todos");
   const [mov, setMov] = useState({ tipo: "saida", descricao: "", valor: 0, forma: "Dinheiro" });
 
   const { data: sessao } = useQuery({
@@ -70,6 +74,23 @@ function Caixa() {
     .filter((m) => m.tipo === "saida")
     .reduce((s, m) => s + Number(m.valor), 0);
   const saldo = Number(sessao?.valor_inicial ?? 0) + entradas - saidas;
+  const movimentosVisiveis = useMemo(
+    () =>
+      (movimentos ?? []).filter(
+        (m) =>
+          (filtroTipo === "todos" || m.tipo === filtroTipo) &&
+          matches(buscaMov, [m.descricao, m.forma, m.responsavel]),
+      ),
+    [movimentos, buscaMov, filtroTipo],
+  );
+  const totaisPorForma = useMemo(() => {
+    const mapa = new Map<string, number>();
+    for (const m of movimentos ?? []) {
+      const forma = m.forma || "Não informada";
+      mapa.set(forma, (mapa.get(forma) ?? 0) + (m.tipo === "entrada" ? Number(m.valor) : -Number(m.valor)));
+    }
+    return Array.from(mapa.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [movimentos]);
 
   const abrir = useMutation({
     mutationFn: async () => {
@@ -97,6 +118,25 @@ function Caixa() {
       toast.success("Caixa fechado");
       void qc.invalidateQueries();
     },
+  });
+
+  const estornar = useMutation({
+    mutationFn: async (m: NonNullable<typeof movimentos>[number]) => {
+      const { error } = await supabase.from("caixa_movimentos").insert({
+        sessao_id: sessao!.id,
+        tipo: m.tipo === "entrada" ? "saida" : "entrada",
+        descricao: `Estorno: ${m.descricao}`,
+        valor: Number(m.valor),
+        forma: m.forma,
+        responsavel: nome,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Estorno lançado como novo movimento; o histórico original foi preservado.");
+      void qc.invalidateQueries({ queryKey: ["caixa-movs"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const lancar = useMutation({
@@ -192,6 +232,7 @@ function Caixa() {
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <div className="card-surface space-y-3 p-5">
           <h2 className="font-display text-xl font-bold uppercase">Novo lançamento</h2>
+          <p className="text-xs text-muted-foreground">Registre entradas e saídas somente no caixa aberto. Para corrigir um lançamento, use estorno; não apagamos o histórico.</p>
           <div className="space-y-1.5">
             <Label>Tipo</Label>
             <Select value={mov.tipo} onValueChange={(v) => setMov({ ...mov, tipo: v })}>
@@ -246,7 +287,24 @@ function Caixa() {
           </Button>
         </div>
 
-        <div className="card-surface overflow-x-auto">
+        <div className="space-y-4">
+          <div className="card-surface space-y-3 p-4">
+            <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+              <Input value={buscaMov} onChange={(e) => setBuscaMov(e.target.value)} placeholder="Buscar descrição, forma ou responsável..." aria-label="Buscar movimentos do caixa" />
+              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                <SelectTrigger aria-label="Filtrar movimentos por tipo"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Entradas e saídas</SelectItem>
+                  <SelectItem value="entrada">Somente entradas</SelectItem>
+                  <SelectItem value="saida">Somente saídas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              {totaisPorForma.map(([forma, valor]) => <Badge key={forma} variant="outline">{forma}: {brl(valor)}</Badge>)}
+            </div>
+          </div>
+          <div className="card-surface overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left">
               <tr>
@@ -254,10 +312,11 @@ function Caixa() {
                 <th className="p-3">Descrição</th>
                 <th className="p-3">Forma</th>
                 <th className="p-3 text-right">Valor</th>
+                {gerente && <th className="p-3 text-right">Ação</th>}
               </tr>
             </thead>
             <tbody>
-              {(movimentos ?? []).map((m) => (
+              {movimentosVisiveis.map((m) => (
                 <tr key={m.id} className="border-b last:border-0">
                   <td className="num p-3 text-muted-foreground">{dt(m.created_at)}</td>
                   <td className="p-3">{m.descricao}</td>
@@ -267,17 +326,32 @@ function Caixa() {
                   >
                     {m.tipo === "entrada" ? "+" : "−"} {brl(m.valor)}
                   </td>
+                  {gerente && (
+                    <td className="p-3 text-right">
+                      {!m.descricao.startsWith("Estorno:") && (
+                        <ConfirmActionDialog
+                          trigger={<Button variant="ghost" size="sm" title="Estornar movimento"><i className="fa-solid fa-rotate-left" /></Button>}
+                          title="Confirmar estorno"
+                          description={<>Será lançado um novo movimento inverso de <strong className="text-foreground">{brl(m.valor)}</strong>. O lançamento original continuará no histórico.</>}
+                          confirmLabel="Lançar estorno"
+                          destructive
+                          onConfirm={() => estornar.mutateAsync(m)}
+                        />
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
-              {(movimentos ?? []).length === 0 && (
+              {movimentosVisiveis.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                    Nenhum movimento registrado hoje.
+                  <td colSpan={gerente ? 5 : 4} className="p-8 text-center text-muted-foreground">
+                    Nenhum movimento encontrado com os filtros atuais.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </AppShell>
