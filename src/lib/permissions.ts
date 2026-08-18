@@ -17,10 +17,11 @@ export type NavKey =
   | "notificacoes"
   | "avisos"
   | "configuracoes"
-  | "relatorios";
+  | "relatorios"
+  | "notificacoes-internas";
 
 /** Rotas que o mecânico pode abrir diretamente. */
-const MECANICO_PREFIXES = ["/patio", "/historico", "/atendimento"];
+const MECANICO_PREFIXES = ["/patio", "/historico", "/atendimento", "/notificacoes-internas"];
 
 export function isRouteAllowed(role: Role | null, pathname: string): boolean {
   if (role !== "mecanico") return true; // gerente: acesso total
@@ -43,9 +44,10 @@ const NAV_GERENTE: NavKey[] = [
   "avisos",
   "configuracoes",
   "relatorios",
+  "notificacoes-internas",
 ];
 
-const NAV_MECANICO: NavKey[] = ["patio", "historico"];
+const NAV_MECANICO: NavKey[] = ["patio", "historico", "notificacoes-internas"];
 
 export function navFor(role: Role | null): NavKey[] {
   return role === "mecanico" ? NAV_MECANICO : NAV_GERENTE;
