@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { criarMecanico } from "@/lib/mecanicos.server";
 import { maskPhone, onlyDigits } from "@/lib/masks";
 import { AppShell, PageHeader } from "@/components/AppShell";
@@ -36,6 +37,7 @@ const formVazio = { nome: "", email: "", telefone: "", senha: "" };
 
 function Mecanicos() {
   const qc = useQueryClient();
+  const { session } = useAuth();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(formVazio);
 
@@ -54,7 +56,10 @@ function Mecanicos() {
 
   const criar = useMutation({
     mutationFn: async () => {
+      const token = session?.access_token;
+      if (!token) throw new Error("Sessão expirada. Entre novamente para cadastrar o mecânico.");
       await criarMecanico({
+        headers: { Authorization: `Bearer ${token}` },
         data: {
           nome: form.nome.trim(),
           email: form.email.trim(),
