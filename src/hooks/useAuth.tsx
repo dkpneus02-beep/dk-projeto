@@ -56,7 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const [{ data: profile }, { data: roles }, { data: mecanico }] = await Promise.all([
         supabase.from("profiles").select("nome").eq("id", uid).maybeSingle(),
         supabase.from("user_roles").select("role").eq("user_id", uid),
-        supabase.from("mecanicos").select("id").eq("user_id", uid).maybeSingle(),
+        supabase
+          .from("mecanicos")
+          .select("id")
+          .eq("user_id", uid)
+          .eq("ativo", true)
+          .is("deleted_at", null)
+          .maybeSingle(),
       ]);
       if (!active) return;
       setNome(profile?.nome ?? session?.user.email?.split("@")[0] ?? "");
