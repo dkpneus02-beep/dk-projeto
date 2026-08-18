@@ -48,6 +48,7 @@ function Dashboard() {
           .from("atendimentos")
           .select("id, total, desconto, finalizado_at, atendimento_servicos(valor)")
           .eq("status", "finalizado")
+          .is("deleted_at", null)
           .gte("finalizado_at", `${hoje}T00:00:00`),
         supabase
           .from("notificacoes_retorno")

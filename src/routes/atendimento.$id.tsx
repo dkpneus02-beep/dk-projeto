@@ -360,6 +360,16 @@ function AtendimentoPage() {
                     <div>
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Serviço</p>
                       <p className="font-medium">{s.nome}</p>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                        <span>
+                          <i className="fa-regular fa-clock mr-1" />
+                          Início: {s.iniciado_at ? dt(s.iniciado_at) : "aguardando"}
+                        </span>
+                        <span>
+                          <i className="fa-solid fa-flag-checkered mr-1" />
+                          Fim: {s.concluido_at ? dt(s.concluido_at) : "em aberto"}
+                        </span>
+                      </div>
                       {s.peca_id && (
                         <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                           <p><i className="fa-solid fa-box-open mr-1" /><strong>Produto do estoque:</strong> {(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "item do estoque"}</p>

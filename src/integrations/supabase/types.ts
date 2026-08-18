@@ -20,6 +20,8 @@ export type Database = {
           created_at: string
           garantia_km: number | null
           id: string
+          iniciado_at: string | null
+          concluido_at: string | null
           mecanico_id: string | null
           nome: string
           peca_id: string | null
@@ -33,6 +35,8 @@ export type Database = {
           created_at?: string
           garantia_km?: number | null
           id?: string
+          iniciado_at?: string | null
+          concluido_at?: string | null
           mecanico_id?: string | null
           nome: string
           peca_id?: string | null
@@ -46,6 +50,8 @@ export type Database = {
           created_at?: string
           garantia_km?: number | null
           id?: string
+          iniciado_at?: string | null
+          concluido_at?: string | null
           mecanico_id?: string | null
           nome?: string
           peca_id?: string | null
