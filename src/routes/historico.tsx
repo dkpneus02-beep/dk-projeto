@@ -42,7 +42,7 @@ function Historico() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("atendimentos")
-        .select("*, atendimento_servicos(nome, valor), pagamentos(forma, valor, parcelas)")
+        .select("*, atendimento_servicos(nome, valor, peca_id, quantidade, pecas(nome)), pagamentos(forma, valor, parcelas)")
         .is("deleted_at", null)
         .order("entrada_at", { ascending: false })
         .limit(500);
@@ -177,7 +177,14 @@ function Historico() {
                   </td>
                   <td className="p-3">{a.cliente_nome}</td>
                   <td className="p-3 text-muted-foreground">
-                    {(a.atendimento_servicos ?? []).map((s) => s.nome).join(", ") || "—"}
+                    {(a.atendimento_servicos ?? [])
+                      .map((s) => {
+                        const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number };
+                        return item.pecas?.nome
+                          ? `${s.nome} · ${item.pecas.nome}${item.quantidade && item.quantidade !== 1 ? ` x${item.quantidade}` : ""}`
+                          : s.nome;
+                      })
+                      .join(", ") || "—"}
                   </td>
                   <td className="num p-3 text-muted-foreground">{dt(a.entrada_at)}</td>
                   <td className="p-3">
@@ -213,10 +220,14 @@ function Historico() {
                                   finalizado_at: a.finalizado_at,
                                   garantia_ate: a.garantia_ate,
                                 },
-                                (a.atendimento_servicos ?? []).map((s) => ({
-                                  nome: s.nome,
-                                  valor: Number(s.valor),
-                                })),
+                                (a.atendimento_servicos ?? []).map((s) => {
+                                  const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number };
+                                  return {
+                                    nome: item.pecas?.nome ? `${s.nome} · ${item.pecas.nome}` : s.nome,
+                                    valor: Number(s.valor),
+                                    quantidade: Number(item.quantidade ?? 1),
+                                  };
+                                }),
                                 (a.pagamentos ?? []).map((p) => ({
                                   forma: p.forma,
                                   valor: Number(p.valor),

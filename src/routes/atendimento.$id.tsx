@@ -105,6 +105,20 @@ function AtendimentoPage() {
     },
   });
 
+  const { data: pecas } = useQuery({
+    queryKey: ["pecas-ativas-atendimento"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pecas")
+        .select("*")
+        .is("deleted_at", null)
+        .order("nome");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: gerente,
+  });
+
   const { data: config } = useQuery({
     queryKey: ["configuracoes"],
     queryFn: async () => {
@@ -147,6 +161,8 @@ function AtendimentoPage() {
       retorno_meses: number;
       garantia_km: number | null;
       valor: number;
+      peca_id?: string | null;
+      quantidade?: number;
     }) => {
       const { error } = await supabase.from("atendimento_servicos").insert({
         atendimento_id: id,
@@ -154,6 +170,8 @@ function AtendimentoPage() {
         valor: payload.valor,
         retorno_meses: payload.retorno_meses,
         garantia_km: payload.garantia_km,
+        peca_id: payload.peca_id ?? null,
+        quantidade: payload.quantidade ?? 1,
       });
       if (error) throw error;
     },
@@ -283,7 +301,16 @@ function AtendimentoPage() {
               {servicos.map((s) => (
                 <div key={s.id} className="rounded-md border p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">{s.nome}</p>
+                    <div>
+                      <p className="font-medium">{s.nome}</p>
+                      {s.peca_id && (
+                        <p className="text-xs text-muted-foreground">
+                          <i className="fa-solid fa-box-open mr-1" />
+                          Peça usada: {(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "item do estoque"}
+                          {` · qtd. ${Number(s.quantidade || 1)}`}
+                        </p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <Badge
                         variant={
@@ -356,6 +383,49 @@ function AtendimentoPage() {
                           })
                         }
                       />
+                      <div className="grid gap-2 sm:col-span-3 sm:grid-cols-[1fr_120px]">
+                        <Select
+                          value={s.peca_id ?? "none"}
+                          onValueChange={(v) => {
+                            const peca = (pecas ?? []).find((p) => p.id === v);
+                            updServico.mutate({
+                              sid: s.id,
+                              patch: {
+                                peca_id: v === "none" ? null : v,
+                                quantidade: s.quantidade || 1,
+                                ...(peca && v !== "none" ? { valor: Number(peca.preco_venda) } : {}),
+                              },
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Peça/óleo/pneu usado (opcional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Sem peça vinculada</SelectItem>
+                            {(pecas ?? []).map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.nome} · estoque {Number(p.estoque)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          className="num"
+                          defaultValue={Number(s.quantidade || 1)}
+                          disabled={!s.peca_id}
+                          aria-label="Quantidade da peça"
+                          onBlur={(e) =>
+                            updServico.mutate({
+                              sid: s.id,
+                              patch: { quantidade: Math.max(Number(e.target.value) || 1, 0.01) },
+                            })
+                          }
+                        />
+                      </div>
                     </div>
                   )}
                   {!finalizado && !gerente && (
@@ -540,7 +610,13 @@ function AtendimentoPage() {
                 finalizado_at: new Date().toISOString(),
                 garantia_ate: resultado.garantia_ate,
               },
-              servicos: servicos.map((s) => ({ nome: s.nome, valor: Number(s.valor) })),
+              servicos: servicos.map((s) => ({
+                nome: s.peca_id
+                  ? `${s.nome} · ${(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "peça do estoque"}`
+                  : s.nome,
+                valor: Number(s.valor),
+                quantidade: Number(s.quantidade ?? 1),
+              })),
               pagamentos: resultado.pagamentos,
             });
           }}
@@ -697,11 +773,13 @@ function ChecklistServicos({
   );
 }
 
-type Servico = {
+  type Servico = {
   id: string;
   nome: string;
   valor: number;
   mecanico_id: string | null;
+  peca_id: string | null;
+  quantidade: number;
   retorno_meses: number;
   garantia_km: number | null;
 };

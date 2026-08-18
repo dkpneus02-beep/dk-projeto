@@ -14,7 +14,7 @@ export type ReciboAtendimento = {
   garantia_ate: string | null;
 };
 
-export type ReciboServico = { nome: string; valor: number };
+export type ReciboServico = { nome: string; valor: number; quantidade?: number };
 export type ReciboPagamento = { forma: string; valor: number; parcelas: number };
 
 export type ReciboConfig = {
@@ -34,7 +34,8 @@ export function buildReceiptHtml(
   const bruto = servicos.reduce((s, x) => s + Number(x.valor), 0);
   const linhasServicos = servicos
     .map(
-      (s) => `<tr><td>${escapeHtml(s.nome)}</td><td class="num">${brl(s.valor)}</td></tr>`,
+      (s) =>
+        `<tr><td>${escapeHtml(s.nome)}${s.quantidade && s.quantidade !== 1 ? ` x${s.quantidade}` : ""}</td><td class="num">${brl(s.valor)}</td></tr>`,
     )
     .join("");
   const linhasPagamentos = pagamentos
