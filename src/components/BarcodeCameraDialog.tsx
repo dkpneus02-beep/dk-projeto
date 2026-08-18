@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 import {
   Dialog,
   DialogContent,
@@ -7,16 +8,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-
-type Detector = {
-  detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
-};
-
-type DetectorConstructor = new (options?: { formats?: string[] }) => Detector;
-
-type BarcodeWindow = Window & typeof globalThis & {
-  BarcodeDetector?: DetectorConstructor;
-};
 
 export function BarcodeCameraDialog({
   open,
@@ -28,74 +19,47 @@ export function BarcodeCameraDialog({
   onDetected: (codigo: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open || typeof window === "undefined") return;
+    if (!open || typeof window === "undefined" || !videoRef.current) return;
 
     let cancelado = false;
-    let timer: number | undefined;
+    const reader = new BrowserMultiFormatReader();
     const parar = () => {
-      if (timer) window.clearTimeout(timer);
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    };
-
-    const iniciar = async () => {
-      try {
-        const BarcodeDetector = (window as BarcodeWindow).BarcodeDetector;
-        if (!BarcodeDetector) {
-          setErro("Seu navegador não oferece leitura de código pela câmera. Use um leitor USB/Bluetooth ou digite o SKU.");
-          return;
-        }
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setErro("O navegador não liberou acesso à câmera neste dispositivo.");
-          return;
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-        if (cancelado) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        const detector = new BarcodeDetector({
-          formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf"],
-        });
-        const procurar = async () => {
-          if (cancelado || !videoRef.current) return;
-          try {
-            const encontrados = await detector.detect(videoRef.current);
-            const codigo = encontrados[0]?.rawValue?.trim();
-            if (codigo) {
-              parar();
-              onDetected(codigo);
-              onOpenChange(false);
-              return;
-            }
-          } catch {
-            // O vídeo ainda pode estar sem um frame pronto; tenta novamente.
-          }
-          timer = window.setTimeout(() => void procurar(), 180);
-        };
-        void procurar();
-      } catch (e) {
-        parar();
-        setErro(e instanceof Error ? e.message : "Não foi possível abrir a câmera.");
-      }
+      controlsRef.current?.stop();
+      controlsRef.current = null;
     };
 
     setErro(null);
-    void iniciar();
+    void reader
+      .decodeFromConstraints(
+        { video: { facingMode: { ideal: "environment" } }, audio: false },
+        videoRef.current,
+        (result) => {
+          if (cancelado || !result) return;
+          const codigo = result.getText().trim();
+          if (!codigo) return;
+          parar();
+          onDetected(codigo);
+          onOpenChange(false);
+        },
+      )
+      .then((controls) => {
+        if (cancelado) controls.stop();
+        else controlsRef.current = controls;
+      })
+      .catch((e: unknown) => {
+        if (!cancelado) {
+          setErro(
+            e instanceof Error
+              ? e.message
+              : "Não foi possível abrir a câmera. Confira a permissão do navegador.",
+          );
+        }
+      });
+
     return () => {
       cancelado = true;
       parar();
@@ -112,7 +76,9 @@ export function BarcodeCameraDialog({
         {erro ? (
           <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm">
             <p>{erro}</p>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Fechar
+            </Button>
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg bg-black">
