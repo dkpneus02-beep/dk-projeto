@@ -59,11 +59,16 @@ function Pecas() {
   const [tab, setTab] = useState("todos");
   const [edit, setEdit] = useState<null | (typeof vazio & { id?: string })>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [entradaOpen, setEntradaOpen] = useState(false);
+  const [entradaPecaId, setEntradaPecaId] = useState("");
+  const [entradaQuantidade, setEntradaQuantidade] = useState(1);
   const [favoritos, setFavoritos] = useState<string[]>([]);
 
   useEffect(() => {
     try {
-      setFavoritos(JSON.parse(localStorage.getItem("dk-pneus-pecas-favoritas") ?? "[]") as string[]);
+      setFavoritos(
+        JSON.parse(localStorage.getItem("dk-pneus-pecas-favoritas") ?? "[]") as string[],
+      );
     } catch {
       setFavoritos([]);
     }
@@ -92,31 +97,20 @@ function Pecas() {
     [data, busca, tab, favoritos],
   );
 
-  const aplicarCodigo = (codigo: string) => {
+  const aplicarCodigo = (codigoBruto: string) => {
+    const codigo = codigoBruto.trim();
+    if (!codigo) return;
     setBusca(codigo);
-    const achada = (data ?? []).find((p) => p.sku?.toLowerCase() === codigo.toLowerCase());
+    const achada = (data ?? []).find((p) => p.sku?.trim().toLowerCase() === codigo.toLowerCase());
     if (achada) {
-      toast.success(`Peça encontrada: ${achada.nome}`);
-      setEdit(achada ? {
-        id: achada.id,
-        sku: achada.sku ?? "",
-        nome: achada.nome,
-        marca: achada.marca ?? "",
-        tipo: achada.tipo,
-        estoque: Number(achada.estoque),
-        estoque_minimo: Number(achada.estoque_minimo),
-        preco_custo: Number(achada.preco_custo),
-        margem: Number(achada.margem),
-        preco_venda: Number(achada.preco_venda),
-        medida: achada.medida ?? "",
-        indice_carga: achada.indice_carga ?? "",
-        simbolo_velocidade: achada.simbolo_velocidade ?? "",
-        modelo_desenho: achada.modelo_desenho ?? "",
-        construcao: achada.construcao ?? "",
-      } : null);
-    } else {
-      toast.info(`Nenhuma peça com o código "${codigo}" — use "Novo item" para cadastrar.`);
+      toast.success(`Item encontrado: ${achada.nome}`);
+      abrir(achada);
+      return;
     }
+
+    // Código novo: já abre o cadastro com o SKU preenchido, sem exigir redigitação.
+    setEdit({ ...vazio, sku: codigo });
+    toast.info(`Código ${codigo} preenchido. Complete nome, preço e estoque para salvar.`);
   };
 
   // Leitor USB/Bluetooth: funciona como teclado e cai na mesma busca inteligente da câmera.
@@ -124,8 +118,22 @@ function Pecas() {
 
   const salvar = useMutation({
     mutationFn: async (p: typeof vazio & { id?: string }) => {
+      const sku = p.sku.trim();
+      if (sku) {
+        const { data: duplicado, error: erroDuplicado } = await supabase
+          .from("pecas")
+          .select("id, nome")
+          .eq("sku", sku)
+          .is("deleted_at", null)
+          .neq("id", p.id ?? "00000000-0000-0000-0000-000000000000")
+          .maybeSingle();
+        if (erroDuplicado) throw erroDuplicado;
+        if (duplicado)
+          throw new Error(`Já existe um item ativo com o código ${sku}: ${duplicado.nome}.`);
+      }
+
       const payload = {
-        sku: p.sku || null,
+        sku: sku || null,
         nome: p.nome,
         marca: p.marca || null,
         tipo: p.tipo,
@@ -149,6 +157,28 @@ function Pecas() {
     onSuccess: () => {
       toast.success("Item salvo");
       setEdit(null);
+      void qc.invalidateQueries({ queryKey: ["pecas"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const entradaEstoque = useMutation({
+    mutationFn: async () => {
+      if (!entradaPecaId || entradaQuantidade <= 0) {
+        throw new Error("Informe o item e uma quantidade maior que zero.");
+      }
+      const { data: item, error } = await supabase.rpc("adicionar_entrada_estoque", {
+        _peca_id: entradaPecaId,
+        _quantidade: entradaQuantidade,
+      });
+      if (error) throw error;
+      return item;
+    },
+    onSuccess: (item) => {
+      toast.success(`Entrada registrada: +${entradaQuantidade} em ${item.nome}.`);
+      setEntradaOpen(false);
+      setEntradaPecaId("");
+      setEntradaQuantidade(1);
       void qc.invalidateQueries({ queryKey: ["pecas"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -191,9 +221,23 @@ function Pecas() {
   return (
     <AppShell>
       <PageHeader title="Peças e pneus" subtitle="Estoque, custo e precificação">
-        <Button onClick={() => abrir()}>
-          <i className="fa-solid fa-plus" /> Novo item
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setEntradaOpen(true)}>
+            <i className="fa-solid fa-boxes-stacked" /> Entrada rápida
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setEdit({ ...vazio });
+              setCameraOpen(true);
+            }}
+          >
+            <i className="fa-solid fa-barcode" /> Cadastrar por código
+          </Button>
+          <Button onClick={() => abrir()}>
+            <i className="fa-solid fa-plus" /> Novo item
+          </Button>
+        </div>
       </PageHeader>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -260,9 +304,15 @@ function Pecas() {
                       localStorage.setItem("dk-pneus-pecas-favoritas", JSON.stringify(proximo));
                     }}
                   >
-                    <i className={`${favoritos.includes(p.id) ? "fa-solid" : "fa-regular"} fa-star`} />
+                    <i
+                      className={`${favoritos.includes(p.id) ? "fa-solid" : "fa-regular"} fa-star`}
+                    />
                   </button>
-                  <button className="mr-3 text-muted-foreground hover:text-foreground" onClick={() => abrir(p)} title="Editar item">
+                  <button
+                    className="mr-3 text-muted-foreground hover:text-foreground"
+                    onClick={() => abrir(p)}
+                    title="Editar item"
+                  >
                     <i className="fa-solid fa-pen" />
                   </button>
                   <ConfirmActionDialog
@@ -277,8 +327,9 @@ function Pecas() {
                     title="Excluir item do estoque"
                     description={
                       <>
-                        Tem certeza que deseja excluir <strong className="text-foreground">{p.nome}</strong>?
-                        O item será ocultado do estoque, mas os registros já usados em OS serão preservados.
+                        Tem certeza que deseja excluir{" "}
+                        <strong className="text-foreground">{p.nome}</strong>? O item será ocultado
+                        do estoque, mas os registros já usados em OS serão preservados.
                       </>
                     }
                     confirmLabel="Excluir item"
@@ -299,6 +350,61 @@ function Pecas() {
         </table>
       </div>
 
+      <Dialog open={entradaOpen} onOpenChange={setEntradaOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl uppercase">
+              Entrada rápida de estoque
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Escolha o item, informe a quantidade recebida e o sistema somará ao saldo atual sem
+            alterar preço ou cadastro.
+          </p>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Item do estoque</Label>
+              <select
+                value={entradaPecaId}
+                onChange={(event) => setEntradaPecaId(event.target.value)}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Selecione uma peça ou pneu</option>
+                {(data ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
+                    {p.sku ? ` · ${p.sku}` : ""} · saldo {Number(p.estoque)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Quantidade recebida</Label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={entradaQuantidade}
+                onChange={(event) => setEntradaQuantidade(Number(event.target.value) || 0)}
+                className="num"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEntradaOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!entradaPecaId || entradaQuantidade <= 0 || entradaEstoque.isPending}
+              onClick={() => entradaEstoque.mutate()}
+            >
+              {entradaEstoque.isPending && <i className="fa-solid fa-circle-notch fa-spin" />}
+              Registrar entrada
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <BarcodeCameraDialog
         open={cameraOpen}
         onOpenChange={setCameraOpen}
@@ -314,6 +420,15 @@ function Pecas() {
               </DialogTitle>
             </DialogHeader>
 
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 p-3">
+              <p className="text-sm text-muted-foreground">
+                Use câmera ou scanner USB para preencher o código automaticamente.
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={() => setCameraOpen(true)}>
+                <i className="fa-solid fa-camera" /> Ler código
+              </Button>
+            </div>
+
             <Tabs value={edit.tipo} onValueChange={(v) => setEdit({ ...edit, tipo: v })}>
               <TabsList>
                 <TabsTrigger value="peca">Peça</TabsTrigger>
@@ -322,12 +437,28 @@ function Pecas() {
             </Tabs>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <Campo label="Nome" value={edit.nome} onChange={(v) => setEdit({ ...edit, nome: v })} />
-              <Campo label="Código / SKU" value={edit.sku} onChange={(v) => setEdit({ ...edit, sku: v })} />
-              <Campo label="Marca" value={edit.marca} onChange={(v) => setEdit({ ...edit, marca: v })} />
+              <Campo
+                label="Nome"
+                value={edit.nome}
+                onChange={(v) => setEdit({ ...edit, nome: v })}
+              />
+              <Campo
+                label="Código / SKU"
+                value={edit.sku}
+                onChange={(v) => setEdit({ ...edit, sku: v })}
+              />
+              <Campo
+                label="Marca"
+                value={edit.marca}
+                onChange={(v) => setEdit({ ...edit, marca: v })}
+              />
               {edit.tipo === "pneu" && (
                 <>
-                  <Campo label="Medida" value={edit.medida} onChange={(v) => setEdit({ ...edit, medida: v })} />
+                  <Campo
+                    label="Medida"
+                    value={edit.medida}
+                    onChange={(v) => setEdit({ ...edit, medida: v })}
+                  />
                   <Campo
                     label="Índice de carga"
                     value={edit.indice_carga}

@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { maskCPF, maskPhone, isValidCPF, onlyDigits } from "@/lib/masks";
+import { uploadVistoriaImgBB } from "@/lib/imgbb";
 
 const AVARIAS = [
   "Farol trincado",
@@ -55,35 +56,34 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
     mutationFn: async () => {
       const atendimentoId = crypto.randomUUID();
       const fotos: string[] = [];
-      for (const file of arquivos) {
-        const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
-        const { error } = await supabase.storage.from("vistorias").upload(path, file);
-        if (error) throw error;
-        const { data } = await supabase.storage.from("vistorias").createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
-        if (data?.signedUrl) fotos.push(data.signedUrl);
+      for (const [index, file] of arquivos.entries()) {
+        const foto = await uploadVistoriaImgBB(file, `vistoria-${form.placa}-${index + 1}`);
+        fotos.push(foto.url);
       }
-      const { error } = await supabase
-        .from("atendimentos")
-        .insert({
-          id: atendimentoId,
-          placa: form.placa.toUpperCase(),
-          fabricante: form.fabricante,
-          modelo: form.modelo,
-          cor: form.cor,
-          cliente_nome: form.cliente_nome,
-          cliente_telefone: form.cliente_telefone,
-          cliente_cpf: form.cliente_cpf,
-          km: form.km ? Number(form.km) : null,
-          observacao: form.observacao,
-          alertas_tecnicos: form.alertas_tecnicos,
-          avarias,
-          fotos,
-        });
+      const { error } = await supabase.from("atendimentos").insert({
+        id: atendimentoId,
+        placa: form.placa.toUpperCase(),
+        fabricante: form.fabricante,
+        modelo: form.modelo,
+        cor: form.cor,
+        cliente_nome: form.cliente_nome,
+        cliente_telefone: form.cliente_telefone,
+        cliente_cpf: form.cliente_cpf,
+        km: form.km ? Number(form.km) : null,
+        observacao: form.observacao,
+        alertas_tecnicos: form.alertas_tecnicos,
+        avarias,
+        fotos,
+      });
       if (error) throw error;
-      return atendimentoId;
+      return { id: atendimentoId, fotosPublicadas: fotos.length };
     },
-    onSuccess: (id) => {
-      toast.success("Atendimento aberto");
+    onSuccess: ({ id, fotosPublicadas }) => {
+      toast.success(
+        fotosPublicadas > 0
+          ? `Atendimento aberto. ${fotosPublicadas} foto(s) publicada(s) no ImgBB.`
+          : "Atendimento aberto",
+      );
       void qc.invalidateQueries();
       setOpen(false);
       void navigate({ to: "/atendimento/$id", params: { id } });
@@ -212,7 +212,11 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
             disabled={!form.placa || !form.cliente_nome || cpfInvalido || criar.isPending}
           >
             {criar.isPending && <i className="fa-solid fa-circle-notch fa-spin" />}
-            Abrir atendimento
+            {criar.isPending
+              ? arquivos.length > 0
+                ? "Publicando fotos e abrindo atendimento..."
+                : "Abrindo atendimento..."
+              : "Abrir atendimento"}
           </Button>
         </DialogFooter>
       </DialogContent>

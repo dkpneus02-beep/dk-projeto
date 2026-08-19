@@ -29,6 +29,7 @@ import { brl, d, dt, FORMAS_PAGAMENTO, matches, statusLabel, whatsappLink } from
 import { useAuth } from "@/hooks/useAuth";
 import { isGerente, canEditServico } from "@/lib/permissions";
 import { printReceipt } from "@/lib/receipt";
+import { uploadVistoriaImgBB } from "@/lib/imgbb";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import {
   AlertDialog,
@@ -255,16 +256,13 @@ function AtendimentoPage() {
     setFotoBusy(true);
     try {
       const novasFotos: string[] = [];
-      for (const file of Array.from(files)) {
-        const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
-        const { error } = await supabase.storage.from("vistorias").upload(path, file);
-        if (error) throw error;
-        const { data: signed } = await supabase.storage.from("vistorias").createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
-        if (signed?.signedUrl) novasFotos.push(signed.signedUrl);
+      for (const [index, file] of Array.from(files).entries()) {
+        const foto = await uploadVistoriaImgBB(file, `vistoria-${data.placa}-${fotos.length + index + 1}`);
+        novasFotos.push(foto.url);
       }
       if (novasFotos.length) {
         await salvarAtendimento.mutateAsync({ fotos: [...fotos, ...novasFotos] });
-        toast.success(`${novasFotos.length} foto(s) adicionada(s) à vistoria`);
+        toast.success(`${novasFotos.length} foto(s) publicada(s) no ImgBB e adicionada(s) à vistoria`);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível anexar as fotos.");

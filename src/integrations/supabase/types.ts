@@ -625,6 +625,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adicionar_entrada_estoque: {
+        Args: {
+          _peca_id: string
+          _quantidade: number
+        }
+        Returns: Database["public"]["Tables"]["pecas"]["Row"]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

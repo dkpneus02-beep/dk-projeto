@@ -77,7 +77,9 @@ export function BarcodeCameraDialog({
         return;
       }
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        setErro("A câmera só funciona em uma conexão HTTPS segura. Use a opção de foto enquanto isso.");
+        setErro(
+          "A câmera só funciona em uma conexão HTTPS segura. Use a opção de foto enquanto isso.",
+        );
         setIniciando(false);
         return;
       }
@@ -144,7 +146,9 @@ export function BarcodeCameraDialog({
       onDetectedRef.current(codigo);
       onOpenChangeRef.current(false);
     } catch {
-      setErro("Não foi possível ler o código nessa foto. Tente aproximar, melhorar a iluminação ou usar um leitor USB/Bluetooth.");
+      setErro(
+        "Não foi possível ler o código nessa foto. Tente aproximar, melhorar a iluminação ou usar um leitor USB/Bluetooth.",
+      );
     } finally {
       URL.revokeObjectURL(url);
       setProcessandoFoto(false);
@@ -157,22 +161,40 @@ export function BarcodeCameraDialog({
         <DialogHeader>
           <DialogTitle className="font-display uppercase">Ler código pela câmera</DialogTitle>
           <DialogDescription>
-            Permita a câmera traseira quando o navegador perguntar e aponte para o código de barras do item.
+            Permita a câmera traseira quando o navegador perguntar e aponte para o código de barras
+            do item.
           </DialogDescription>
         </DialogHeader>
 
-        {erro && <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">{erro}</div>}
+        {erro && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+            {erro}
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-lg bg-black">
-          <video ref={videoRef} muted playsInline autoPlay className="aspect-video w-full object-cover" />
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            autoPlay
+            className="aspect-video w-full object-cover"
+          />
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" disabled={iniciando} onClick={() => setTentativa((valor) => valor + 1)}>
-            <i className="fa-solid fa-rotate-right" /> {iniciando ? "Abrindo câmera..." : "Tentar novamente"}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={iniciando}
+            onClick={() => setTentativa((valor) => valor + 1)}
+          >
+            <i className="fa-solid fa-rotate-right" />{" "}
+            {iniciando ? "Abrindo câmera..." : "Tentar novamente"}
           </Button>
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
-            <i className="fa-solid fa-image" /> {processandoFoto ? "Lendo foto..." : "Usar foto/galeria"}
+            <i className="fa-solid fa-image" />{" "}
+            {processandoFoto ? "Lendo foto..." : "Usar foto/galeria"}
             <input
               type="file"
               accept="image/*"
