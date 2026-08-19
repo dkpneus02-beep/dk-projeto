@@ -20,15 +20,40 @@ export const Route = createFileRoute("/backup")({
 });
 
 const TABELAS = [
+  "profiles",
+  "user_roles",
+  "mecanicos",
+  "pecas",
+  "servicos_catalogo",
   "atendimentos",
   "atendimento_servicos",
+  "atendimento_pecas_movimentos",
   "pagamentos",
   "caixa_sessoes",
   "caixa_movimentos",
-  "pecas",
-  "mecanicos",
-  "servicos_catalogo",
   "notificacoes_retorno",
+  "notificacoes_retorno_contatos",
+  "avisos",
+  "aviso_leituras",
+  "notificacoes_internas",
+  "configuracoes",
+  "audit_eventos",
+] as const;
+
+const ORDEM_RESTAURACAO = [
+  "profiles",
+  "user_roles",
+  "mecanicos",
+  "pecas",
+  "servicos_catalogo",
+  "atendimentos",
+  "atendimento_servicos",
+  "atendimento_pecas_movimentos",
+  "pagamentos",
+  "caixa_sessoes",
+  "caixa_movimentos",
+  "notificacoes_retorno",
+  "notificacoes_retorno_contatos",
   "avisos",
   "aviso_leituras",
   "notificacoes_internas",
@@ -48,6 +73,7 @@ type BackupPayload = {
     bucket: string;
     note: string;
   };
+  restore_order: readonly string[];
 };
 
 async function carregarTabela(nome: string) {
@@ -95,8 +121,9 @@ function Backup() {
         tables: Object.fromEntries(entries),
         storage: {
           bucket: "vistorias",
-          note: "Os registros de avarias e seus links de fotos são preservados em atendimentos.avarias. Os arquivos binários do Storage devem ser mantidos no projeto Supabase e não são incorporados neste JSON.",
+          note: "Os registros de avarias e seus links de fotos são preservados em atendimentos.avarias. Os arquivos binários do Storage devem ser mantidos no projeto Supabase e não são incorporados neste JSON. As subscriptions de Web Push não são exportadas por conterem credenciais específicas de dispositivos.",
         },
+        restore_order: ORDEM_RESTAURACAO,
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob);

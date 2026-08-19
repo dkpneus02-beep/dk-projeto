@@ -77,18 +77,10 @@ function Historico() {
 
   const desfinalizar = useMutation({
     mutationFn: async (id: string) => {
-      // Reabre o atendimento: volta pro pátio com os dados liberados para
-      // alteração. Os pagamentos e o lançamento no caixa são revertidos —
-      // ao finalizar novamente, um novo recibo é emitido.
-      const { error: e1 } = await supabase.from("caixa_movimentos").delete().eq("atendimento_id", id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase.from("pagamentos").delete().eq("atendimento_id", id);
-      if (e2) throw e2;
-      const { error: e3 } = await supabase
-        .from("atendimentos")
-        .update({ status: "aberto", finalizado_at: null, pronto_at: null, pronto_por: null })
-        .eq("id", id);
-      if (e3) throw e3;
+      // Reabre o atendimento em uma única transação: caixa, pagamentos,
+      // estorno de estoque e status são revertidos juntos.
+      const { error } = await supabase.rpc("reabrir_atendimento_transacional", { _atendimento_id: id });
+      if (error) throw error;
     },
     onSuccess: (_v, id) => {
       toast.success("Atendimento reaberto — voltou para o pátio");

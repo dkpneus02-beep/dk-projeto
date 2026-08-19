@@ -91,6 +91,7 @@
     "vite": "^8.2.0"
   },
   "optionalDependencies": {
+    "@oxc-parser/binding-linux-x64-gnu": "^0.146.0",
     "@rolldown/binding-linux-x64-gnu": "^1.2.4",
     "@tailwindcss/oxide-linux-x64-gnu": "^4.3.3",
     "lightningcss-linux-x64-gnu": "^1.32.0"

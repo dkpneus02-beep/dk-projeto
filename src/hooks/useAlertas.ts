@@ -14,6 +14,7 @@ export function useAlertas() {
   const { user, role, nome } = useAuth();
   const qc = useQueryClient();
   const ultimoRetorno = useRef(0);
+  const ultimoFechamento = useRef("");
 
   // --------------------------------------------------------------
   // Tempo real (Supabase Realtime): reflete IMEDIATAMENTE no painel
@@ -129,6 +130,7 @@ export function useAlertas() {
     };
 
     const checar = async () => {
+      if (Notification.permission !== "granted") return;
       const { data: cfg } = await supabase.from("configuracoes").select("*").maybeSingle();
       const fechamento = cfg?.horario_fechamento ?? "17:30";
       const antecedencia = cfg?.aviso_antecedencia_min ?? 15;
@@ -142,12 +144,16 @@ export function useAlertas() {
       if (minutosAteFim <= antecedencia && minutosAteFim > -120) {
         const { data } = await supabase
           .from("atendimento_servicos")
-          .select("id, nome, status, atendimentos!inner(placa, status)")
-          .neq("status", "concluido");
+          .select("id, nome, status, atendimentos!inner(placa, status, deleted_at)")
+          .neq("status", "concluido")
+          .is("atendimentos.deleted_at", null);
         const pendentes = (data ?? []).filter(
           (s) => (s.atendimentos as { status: string } | null)?.status === "aberto",
         );
-        if (pendentes.length) {
+        const hoje = agora.toISOString().slice(0, 10);
+        const chaveFechamento = `${hoje}:${pendentes.map((p) => p.id).sort().join(",")}`;
+        if (pendentes.length && chaveFechamento !== ultimoFechamento.current) {
+          ultimoFechamento.current = chaveFechamento;
           const placas = [
             ...new Set(pendentes.map((p) => (p.atendimentos as { placa: string }).placa)),
           ].join(", ");
@@ -155,6 +161,8 @@ export function useAlertas() {
             "Aviso de fechamento",
             `Olá${nome ? `, ${nome}` : ""}! O expediente encerra às ${fechamento}. Há ${pendentes.length} serviço(s) pendente(s) no(s) veículo(s) ${placas}.`,
           );
+        } else if (!pendentes.length) {
+          ultimoFechamento.current = "";
         }
       }
 
@@ -178,13 +186,20 @@ export function useAlertas() {
     };
 
     void checar();
+    const permissionEvent = () => void checar();
+    window.addEventListener("dk-notificacoes-permissao", permissionEvent);
     const id = window.setInterval(() => void checar(), 10 * 60 * 1000);
-    return () => window.clearInterval(id);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("dk-notificacoes-permissao", permissionEvent);
+    };
   }, [user, role, nome]);
 }
 
 export async function pedirPermissaoNotificacoes() {
   if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
   if (Notification.permission === "granted") return "granted";
-  return await Notification.requestPermission();
+  const permission = await Notification.requestPermission();
+  window.dispatchEvent(new Event("dk-notificacoes-permissao"));
+  return permission;
 }

@@ -77,6 +77,7 @@ function AtendimentoPage() {
         .from("atendimentos")
         .select("*, atendimento_servicos(*), pagamentos(*)")
         .eq("id", id)
+        .is("deleted_at", null)
         .single();
       if (error) throw error;
       return data;
@@ -577,12 +578,19 @@ function AtendimentoPage() {
                           defaultValue={Number(s.quantidade || 1)}
                           disabled={!s.peca_id}
                           aria-label="Quantidade da peça"
-                          onBlur={(e) =>
+                          onBlur={(e) => {
+                            const quantidade = Math.max(Number(e.target.value) || 1, 0.01);
+                            const pecaSelecionada = (pecas ?? []).find((p) => p.id === s.peca_id);
                             updServico.mutate({
                               sid: s.id,
-                              patch: { quantidade: Math.max(Number(e.target.value) || 1, 0.01) },
-                            })
-                          }
+                              patch: {
+                                quantidade,
+                                ...(pecaSelecionada
+                                  ? { preco_peca: Number(pecaSelecionada.preco_venda) * quantidade }
+                                  : {}),
+                              },
+                            });
+                          }}
                         />
                         </div>
                       </div>
@@ -1191,77 +1199,20 @@ function FinalizarDialog({
 
   const finalizar = useMutation({
     mutationFn: async () => {
-      const { data: cfg } = await supabase.from("configuracoes").select("*").maybeSingle();
-      const dias = cfg?.garantia_dias ?? 90;
-      const garantiaAte = new Date();
-      garantiaAte.setDate(garantiaAte.getDate() + dias);
-      const garantiaKm = servicos.reduce<number | null>(
-        (min, s) => (s.garantia_km ? Math.min(min ?? s.garantia_km, s.garantia_km) : min),
-        null,
-      );
-
-      const garantiaAteStr = garantiaAte.toISOString().slice(0, 10);
-
-      const { error: e1 } = await supabase
-        .from("atendimentos")
-        .update({
-          status: "finalizado",
-          desconto,
-          total: liquido,
-          finalizado_at: new Date().toISOString(),
-          garantia_ate: garantiaAteStr,
-          garantia_km: garantiaKm ? (atendimento.km ?? 0) + garantiaKm : null,
-          necessita_retorno: necessitaRetorno,
-          data_retorno_manual: necessitaRetorno && dataRetorno ? dataRetorno : null,
-        })
-        .eq("id", atendimento.id);
-      if (e1) throw e1;
-
-      const { error: e2 } = await supabase.from("pagamentos").insert(
-        pagamentos.map((p) => ({
-          atendimento_id: atendimento.id,
+      const { data: resultado, error } = await supabase.rpc("finalizar_atendimento_transacional", {
+        _atendimento_id: atendimento.id,
+        _desconto: desconto,
+        _pagamentos: pagamentos.map((p) => ({
           forma: p.forma,
           valor: Number(p.valor),
           parcelas: p.parcelas,
         })),
-      );
-      if (e2) throw e2;
-
-      const { data: sessao } = await supabase
-        .from("caixa_sessoes")
-        .select("id")
-        .eq("aberto", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (sessao) {
-        await supabase.from("caixa_movimentos").insert(
-          pagamentos.map((p) => ({
-            sessao_id: sessao.id,
-            tipo: "entrada",
-            descricao: `OS #${atendimento.numero} — ${atendimento.cliente_nome}`,
-            valor: Number(p.valor),
-            forma: p.forma,
-            atendimento_id: atendimento.id,
-          })),
-        );
-      }
-
-      // Retorno é opcional e manual: só cria a notificação se o gerente marcou
-      // "Sim" e definiu uma data. Nada mais é agendado automaticamente.
-      if (necessitaRetorno && dataRetorno) {
-        await supabase.from("notificacoes_retorno").insert({
-          atendimento_id: atendimento.id,
-          cliente_nome: atendimento.cliente_nome,
-          telefone: atendimento.cliente_telefone,
-          veiculo: `${atendimento.modelo ?? ""} ${atendimento.placa}`.trim(),
-          servico: servicos.map((s) => s.nome).join(", "),
-          vencimento: dataRetorno,
-        });
-      }
-
-      return { garantiaAteStr };
+        _necessita_retorno: necessitaRetorno,
+        _data_retorno_manual: necessitaRetorno && dataRetorno ? dataRetorno : null,
+      });
+      if (error) throw error;
+      const retorno = resultado as { garantia_ate?: string | null } | null;
+      return { garantiaAteStr: retorno?.garantia_ate ?? null };
     },
     onSuccess: ({ garantiaAteStr }) => {
       toast.success("Atendimento finalizado e registrado no caixa");
