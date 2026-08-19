@@ -53,6 +53,7 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
 
   const criar = useMutation({
     mutationFn: async () => {
+      const atendimentoId = crypto.randomUUID();
       const fotos: string[] = [];
       for (const file of arquivos) {
         const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
@@ -61,9 +62,10 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
         const { data } = await supabase.storage.from("vistorias").createSignedUrl(path, 60 * 60 * 24 * 365 * 5);
         if (data?.signedUrl) fotos.push(data.signedUrl);
       }
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("atendimentos")
         .insert({
+          id: atendimentoId,
           placa: form.placa.toUpperCase(),
           fabricante: form.fabricante,
           modelo: form.modelo,
@@ -76,11 +78,9 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
           alertas_tecnicos: form.alertas_tecnicos,
           avarias,
           fotos,
-        })
-        .select("id")
-        .single();
+        });
       if (error) throw error;
-      return data.id as string;
+      return atendimentoId;
     },
     onSuccess: (id) => {
       toast.success("Atendimento aberto");

@@ -67,3 +67,31 @@ O carregamento global foi revisado. O alerta de fechamento fazia consultas ao Su
 O bundle mostrou ZXing separado principalmente no chunk da aba Peças e Recharts no chunk da Dashboard; não estão sendo carregados como consulta de dados em todas as telas. A maior causa comprovada de consulta desnecessária foi o hook global de alertas, já corrigido localmente.
 
 Foi executado `npm run build` e `git diff --check` após as correções: ambos passaram. O lint direcionado encontrou 305 problemas, sendo 304 de Prettier e 1 aviso, concentrados no padrão de formatação preexistente do arquivo grande; não foi aplicado `eslint --fix` para evitar alteração não cirúrgica.
+
+## Segunda auditoria pós-deploy — carregamento independente
+
+A Dashboard (`/`) e Carros no pátio (`/patio`) foram abertas diretamente por URL, com sessão autenticada preservada. Ambas renderizaram o conteúdo e a navegação sem exigir clique prévio em outra aba. A Dashboard exibiu o painel mensal e o Pátio exibiu capacidade 0/5 e o botão Novo atendimento.
+
+Histórico (`/historico`) e Notificações internas (`/notificacoes-internas`) também carregaram diretamente. Histórico exibiu busca e filtros Todos/Na garantia/Fora da garantia. Notificações exibiu ativação de alerta, filtros Não lidas/Lidas/Todas/Este mês/Histórico e formulário de mensagem para mecânico.
+
+Caixa (`/caixa`) e Peças e pneus (`/pecas`) carregaram diretamente. Caixa exibiu valor inicial e Abrir caixa; Peças exibiu busca, câmera, filtros Todos/Peças/Pneus/Favoritos e ações de item.
+
+Retornos (`/notificacoes`) e Relatórios (`/relatorios`) carregaram diretamente. Retornos exibiu busca, filtro de status e Apenas vencidos. Relatórios exibiu datas Início/Fim, Este mês, faturamento, OS finalizadas, ticket médio, estoque baixo e tabelas operacionais.
+
+Mecânicos (`/mecanicos`) e Configurações (`/configuracoes`) carregaram diretamente. Mecânicos exibiu Novo mecânico, switches e remoção. Configurações exibiu os campos da oficina, horário, garantia, Salvar e Ativar notificações.
+
+Backup (`/backup`) carregou diretamente. A exportação JSON foi executada e confirmou sucesso; o arquivo `dk-auto-center-backup-2026-08-19.json` apareceu no histórico de downloads do navegador.
+
+## Bloqueio crítico reproduzido na segunda auditoria
+
+Ao tentar criar a OS temporária `TST2026` após o deploy, a versão publicada retornou `new row violates row-level security policy for table "atendimentos"`. O pátio permaneceu em 0/5 e nenhum registro temporário ficou criado. O token da sessão estava presente, válido e com role `authenticated`; portanto, o problema não foi simplesmente sessão expirada.
+
+A inspeção read-only confirmou que existe a policy `atendimentos_insert` com `WITH CHECK (true)`, mas a criação continua bloqueada. O próximo passo é corrigir a causa no banco/camada de inserção antes de continuar os testes destrutivos; os demais dados reais não foram alterados.
+
+## Correção necessária antes de continuar
+
+O diagnóstico isolado confirmou que o Supabase aceita o INSERT da OS com `return=minimal` e permite consultar a linha depois, mas rejeita o mesmo INSERT quando o PostgREST solicita `return=representation`, que é exatamente o que `.insert(...).select('id').single()` utiliza. Por isso a tela mostrava erro de RLS mesmo com a policy de INSERT correta.
+
+A correção local gera o UUID da OS no cliente, envia o `id` explicitamente, executa somente o INSERT e navega usando o UUID já conhecido, sem solicitar a representação da linha no mesmo comando. O registro temporário usado no diagnóstico foi removido com sucesso. O build e `git diff --check` passaram após a correção.
+
+Os testes destrutivos completos foram pausados até publicar essa correção; não há OS temporária restante no pátio.
