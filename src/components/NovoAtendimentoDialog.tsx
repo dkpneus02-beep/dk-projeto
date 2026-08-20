@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -46,6 +46,11 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
   });
   const [avarias, setAvarias] = useState<string[]>([]);
   const [arquivos, setArquivos] = useState<File[]>([]);
+  const previews = useMemo(
+    () => arquivos.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [arquivos],
+  );
+  useEffect(() => () => previews.forEach(({ url }) => URL.revokeObjectURL(url)), [previews]);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -55,10 +60,10 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
   const criar = useMutation({
     mutationFn: async () => {
       const atendimentoId = crypto.randomUUID();
-      const fotos: string[] = [];
+      const fotos: Array<{ url: string; deleteUrl: string | null }> = [];
       for (const [index, file] of arquivos.entries()) {
         const foto = await uploadVistoriaImgBB(file, `vistoria-${form.placa}-${index + 1}`);
-        fotos.push(foto.url);
+        fotos.push({ url: foto.url, deleteUrl: foto.deleteUrl });
       }
       const { error } = await supabase.from("atendimentos").insert({
         id: atendimentoId,
@@ -192,17 +197,64 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
         </Field>
 
         <Field label="Fotos da vistoria">
-          <Input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            onChange={(e) => setArquivos(Array.from(e.target.files ?? []))}
-          />
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
+              <i className="fa-solid fa-camera" /> Tirar foto
+              <Input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(e) => {
+                  setArquivos((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
+              <i className="fa-solid fa-images" /> Escolher da galeria
+              <Input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  setArquivos((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {previews.length > 0 && (
+            <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {previews.map(({ file, url }, index) => (
+                <div
+                  key={`${file.name}-${index}`}
+                  className="relative overflow-hidden rounded-md border bg-muted/20"
+                >
+                  <img
+                    src={url}
+                    alt={`Prévia da foto ${index + 1}`}
+                    className="h-24 w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1 rounded-full bg-destructive px-2 py-1 text-xs text-destructive-foreground shadow"
+                    onClick={() =>
+                      setArquivos((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+                    }
+                    aria-label={`Remover foto ${index + 1}`}
+                  >
+                    <i className="fa-solid fa-xmark" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             {arquivos.length > 0
-              ? `${arquivos.length} arquivo(s) selecionado(s)`
-              : "Toque para tirar foto pela câmera ou escolher da galeria."}
+              ? `${arquivos.length} foto(s) selecionada(s). Você pode visualizar e remover antes de abrir a OS.`
+              : "Escolha entre tirar uma foto ou selecionar várias da galeria."}
           </p>
         </Field>
 

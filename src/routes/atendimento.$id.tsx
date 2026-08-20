@@ -30,6 +30,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { isGerente, canEditServico } from "@/lib/permissions";
 import { printReceipt } from "@/lib/receipt";
 import { uploadVistoriaImgBB } from "@/lib/imgbb";
+import { normalizarFotos, type VistoriaFoto } from "@/lib/vistoria";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import {
   AlertDialog,
@@ -64,6 +65,7 @@ function AtendimentoPage() {
   const [editarDadosOpen, setEditarDadosOpen] = useState(false);
   const [novaAvaria, setNovaAvaria] = useState("");
   const [fotoBusy, setFotoBusy] = useState(false);
+  const [fotoSelecionada, setFotoSelecionada] = useState<string | null>(null);
   const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
@@ -238,7 +240,7 @@ function AtendimentoPage() {
   }
 
   const avarias = (data.avarias as string[]) ?? [];
-  const fotos = (data.fotos as string[]) ?? [];
+  const fotos = normalizarFotos(data.fotos);
 
   const adicionarAvaria = async () => {
     const avaria = novaAvaria.trim();
@@ -255,10 +257,10 @@ function AtendimentoPage() {
     if (!files?.length) return;
     setFotoBusy(true);
     try {
-      const novasFotos: string[] = [];
+      const novasFotos: VistoriaFoto[] = [];
       for (const [index, file] of Array.from(files).entries()) {
         const foto = await uploadVistoriaImgBB(file, `vistoria-${data.placa}-${fotos.length + index + 1}`);
-        novasFotos.push(foto.url);
+        novasFotos.push({ url: foto.url, deleteUrl: foto.deleteUrl });
       }
       if (novasFotos.length) {
         await salvarAtendimento.mutateAsync({ fotos: [...fotos, ...novasFotos] });
@@ -269,6 +271,19 @@ function AtendimentoPage() {
     } finally {
       setFotoBusy(false);
     }
+  };
+
+  const removerFoto = async (foto: VistoriaFoto) => {
+    await salvarAtendimento.mutateAsync({ fotos: fotos.filter((item) => item.url !== foto.url) });
+    if (foto.deleteUrl) {
+      try {
+        await fetch(foto.deleteUrl, { method: "GET" });
+      } catch {
+        // A foto já foi removida da OS; o ImgBB pode manter um arquivo órfão antigo.
+      }
+    }
+    if (fotoSelecionada === foto.url) setFotoSelecionada(null);
+    toast.success("Foto removida da vistoria.");
   };
 
   return (
@@ -693,26 +708,88 @@ function AtendimentoPage() {
               </div>
             )}
             {fotos.length > 0 && (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {fotos.map((f) => (
-                  <a key={f} href={f} target="_blank" rel="noreferrer">
-                    <img
-                      src={f}
-                      alt="Foto da vistoria do veículo"
-                      className="h-24 w-full rounded-md object-cover"
-                      loading="lazy"
-                    />
-                  </a>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                {fotos.map((foto, index) => (
+                  <div key={foto.url} className="relative overflow-hidden rounded-lg border bg-muted/20">
+                    <button type="button" className="block w-full" onClick={() => setFotoSelecionada(foto.url)}>
+                      <img
+                        src={foto.url}
+                        alt={`Foto ${index + 1} da vistoria do veículo`}
+                        className="h-32 w-full object-cover transition hover:opacity-80 sm:h-36"
+                        loading="lazy"
+                      />
+                    </button>
+                    {!finalizado && gerente && (
+                      <ConfirmActionDialog
+                        trigger={
+                          <button
+                            type="button"
+                            className="absolute right-1.5 top-1.5 rounded-full bg-destructive px-2 py-1 text-xs text-destructive-foreground shadow"
+                            title={`Excluir foto ${index + 1}`}
+                            aria-label={`Excluir foto ${index + 1}`}
+                          >
+                            <i className="fa-solid fa-trash-can" />
+                          </button>
+                        }
+                        title="Excluir foto da vistoria"
+                        description="A foto será removida da OS. Deseja continuar?"
+                        confirmLabel="Excluir foto"
+                        destructive
+                        onConfirm={() => removerFoto(foto)}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
             )}
             {!finalizado && gerente && (
-              <div className="space-y-1.5">
-                <Label htmlFor="fotos-vistoria-adicionais">Adicionar fotos posteriores</Label>
-                <Input id="fotos-vistoria-adicionais" type="file" accept="image/*" multiple disabled={fotoBusy} onChange={(e) => void anexarFotos(e.target.files)} />
-                <p className="text-xs text-muted-foreground">As fotos novas serão acrescentadas às atuais, sem substituí-las.</p>
+              <div className="space-y-2">
+                <Label>Adicionar fotos à vistoria</Label>
+                <div className="flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
+                    <i className="fa-solid fa-camera" /> Tirar foto
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      disabled={fotoBusy}
+                      onChange={(e) => {
+                        void anexarFotos(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
+                    <i className="fa-solid fa-images" /> Escolher da galeria
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="sr-only"
+                      disabled={fotoBusy}
+                      onChange={(e) => {
+                        void anexarFotos(e.target.files);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {fotoBusy ? "Compactando e publicando as fotos…" : "Você pode adicionar várias fotos e visualizar qualquer uma tocando nela."}
+                </p>
               </div>
             )}
+            <Dialog open={Boolean(fotoSelecionada)} onOpenChange={(open) => !open && setFotoSelecionada(null)}>
+              <DialogContent className="max-w-4xl p-2 sm:p-4">
+                <DialogHeader>
+                  <DialogTitle className="sr-only">Visualização da foto da vistoria</DialogTitle>
+                </DialogHeader>
+                {fotoSelecionada && (
+                  <img src={fotoSelecionada} alt="Foto ampliada da vistoria" className="max-h-[75vh] w-full rounded-md object-contain" />
+                )}
+              </DialogContent>
+            </Dialog>
             <div className="space-y-1.5">
               <Label>Alertas técnicos / recusa do cliente</Label>
               <Textarea
