@@ -65,6 +65,7 @@ function AtendimentoPage() {
   const [editarDadosOpen, setEditarDadosOpen] = useState(false);
   const [novaAvaria, setNovaAvaria] = useState("");
   const [fotoBusy, setFotoBusy] = useState(false);
+  const [fotoInputKey, setFotoInputKey] = useState(0);
   const [fotoSelecionada, setFotoSelecionada] = useState<string | null>(null);
   const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
   const [reciboPergunta, setReciboPergunta] = useState<null | {
@@ -749,28 +750,32 @@ function AtendimentoPage() {
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
                     <i className="fa-solid fa-camera" /> Tirar foto
                     <Input
+                      key={`camera-${fotoInputKey}`}
                       type="file"
                       accept="image/*"
                       capture="environment"
                       className="sr-only"
                       disabled={fotoBusy}
                       onChange={(e) => {
-                        void anexarFotos(e.target.files);
-                        e.currentTarget.value = "";
+                        const files = e.target.files;
+                        setFotoInputKey((key) => key + 1);
+                        void anexarFotos(files);
                       }}
                     />
                   </label>
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
                     <i className="fa-solid fa-images" /> Escolher da galeria
                     <Input
+                      key={`gallery-${fotoInputKey}`}
                       type="file"
                       accept="image/*"
                       multiple
                       className="sr-only"
                       disabled={fotoBusy}
                       onChange={(e) => {
-                        void anexarFotos(e.target.files);
-                        e.currentTarget.value = "";
+                        const files = e.target.files;
+                        setFotoInputKey((key) => key + 1);
+                        void anexarFotos(files);
                       }}
                     />
                   </label>

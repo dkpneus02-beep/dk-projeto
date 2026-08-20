@@ -46,6 +46,7 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
   });
   const [avarias, setAvarias] = useState<string[]>([]);
   const [arquivos, setArquivos] = useState<File[]>([]);
+  const [fotoInputKey, setFotoInputKey] = useState(0);
   const previews = useMemo(
     () => arquivos.map((file) => ({ file, url: URL.createObjectURL(file) })),
     [arquivos],
@@ -201,26 +202,28 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
               <i className="fa-solid fa-camera" /> Tirar foto
               <Input
+                key={`camera-${fotoInputKey}`}
                 type="file"
                 accept="image/*"
                 capture="environment"
                 className="sr-only"
                 onChange={(e) => {
                   setArquivos((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
-                  e.currentTarget.value = "";
+                  setFotoInputKey((key) => key + 1);
                 }}
               />
             </label>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">
               <i className="fa-solid fa-images" /> Escolher da galeria
               <Input
+                key={`gallery-${fotoInputKey}`}
                 type="file"
                 accept="image/*"
                 multiple
                 className="sr-only"
                 onChange={(e) => {
                   setArquivos((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
-                  e.currentTarget.value = "";
+                  setFotoInputKey((key) => key + 1);
                 }}
               />
             </label>
