@@ -824,7 +824,7 @@ function AtendimentoPage() {
                 </Button>
               )}
             </div>
-            <Info label="Nome" value={data.cliente_nome} />
+            <Info label="Nome" value={data.cliente_nome || "—"} />
             <Info label="Telefone" value={data.cliente_telefone || "—"} />
             <Info label="CPF" value={data.cliente_cpf || "—"} />
             {data.cliente_telefone && (
@@ -1005,10 +1005,10 @@ function EditarDadosOsDialog({
 }: {
   open: boolean;
   atendimento: {
-    cliente_nome: string;
+    cliente_nome: string | null;
     cliente_telefone: string | null;
     cliente_cpf: string | null;
-    placa: string;
+    placa: string | null;
     fabricante: string | null;
     modelo: string | null;
     cor: string | null;
@@ -1018,10 +1018,10 @@ function EditarDadosOsDialog({
   onSave: (patch: TablesUpdate<"atendimentos">) => Promise<void>;
 }) {
   const [form, setForm] = useState({
-    cliente_nome: atendimento.cliente_nome,
+    cliente_nome: atendimento.cliente_nome ?? "",
     cliente_telefone: atendimento.cliente_telefone ?? "",
     cliente_cpf: atendimento.cliente_cpf ?? "",
-    placa: atendimento.placa,
+    placa: atendimento.placa ?? "",
     fabricante: atendimento.fabricante ?? "",
     modelo: atendimento.modelo ?? "",
     cor: atendimento.cor ?? "",

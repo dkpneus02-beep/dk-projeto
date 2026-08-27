@@ -9,6 +9,7 @@ export type Role = "gerente" | "mecanico";
 
 export type NavKey =
   | "dashboard"
+  | "orcamentos"
   | "patio"
   | "historico"
   | "caixa"
@@ -35,6 +36,7 @@ export function homeRouteFor(role: Role | null): string {
 
 const NAV_GERENTE: NavKey[] = [
   "dashboard",
+  "orcamentos",
   "patio",
   "historico",
   "notificacoes-internas",

@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const NAV_ITEMS: Record<NavKey, { to: string; icon: string; label: string }> = {
   dashboard: { to: "/", icon: "fa-gauge-high", label: "Dashboard" },
+  orcamentos: { to: "/orcamentos", icon: "fa-file-invoice-dollar", label: "Orçamentos" },
   patio: { to: "/patio", icon: "fa-warehouse", label: "Carros no pátio" },
   historico: { to: "/historico", icon: "fa-clock-rotate-left", label: "Histórico" },
   caixa: { to: "/caixa", icon: "fa-cash-register", label: "Caixa" },
@@ -24,7 +25,9 @@ const NAV_ITEMS: Record<NavKey, { to: string; icon: string; label: string }> = {
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading, nome, role, signOut } = useAuth();
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s: { location: { pathname: string } }) => s.location.pathname });
+  const pathname = useRouterState({
+    select: (s: { location: { pathname: string } }) => s.location.pathname,
+  });
   useAlertas();
   const { data: mensagensNaoLidas = 0 } = useQuery({
     queryKey: ["notificacoes-nao-lidas", user?.id],

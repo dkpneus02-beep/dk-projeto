@@ -18,6 +18,7 @@ import { Route as HistoricoRouteImport } from './routes/historico'
 import { Route as MecanicosRouteImport } from './routes/mecanicos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as NotificacoesInternasRouteImport } from './routes/notificacoes-internas'
+import { Route as OrcamentosRouteImport } from './routes/orcamentos'
 import { Route as PatioRouteImport } from './routes/patio'
 import { Route as PecasRouteImport } from './routes/pecas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
@@ -70,6 +71,11 @@ const NotificacoesInternasRoute = NotificacoesInternasRouteImport.update({
   path: '/notificacoes-internas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrcamentosRoute = OrcamentosRouteImport.update({
+  id: '/orcamentos',
+  path: '/orcamentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PatioRoute = PatioRouteImport.update({
   id: '/patio',
   path: '/patio',
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
   '/notificacoes-internas': typeof NotificacoesInternasRoute
+  '/orcamentos': typeof OrcamentosRoute
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
   '/relatorios': typeof RelatoriosRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
   '/notificacoes-internas': typeof NotificacoesInternasRoute
+  '/orcamentos': typeof OrcamentosRoute
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
   '/relatorios': typeof RelatoriosRoute
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
   '/notificacoes-internas': typeof NotificacoesInternasRoute
+  '/orcamentos': typeof OrcamentosRoute
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
   '/relatorios': typeof RelatoriosRoute
@@ -165,6 +174,7 @@ export interface FileRouteTypes {
     | '/mecanicos'
     | '/notificacoes'
     | '/notificacoes-internas'
+    | '/orcamentos'
     | '/patio'
     | '/pecas'
     | '/relatorios'
@@ -182,6 +192,7 @@ export interface FileRouteTypes {
     | '/mecanicos'
     | '/notificacoes'
     | '/notificacoes-internas'
+    | '/orcamentos'
     | '/patio'
     | '/pecas'
     | '/relatorios'
@@ -199,6 +210,7 @@ export interface FileRouteTypes {
     | '/mecanicos'
     | '/notificacoes'
     | '/notificacoes-internas'
+    | '/orcamentos'
     | '/patio'
     | '/pecas'
     | '/relatorios'
@@ -217,6 +229,7 @@ export interface RootRouteChildren {
   MecanicosRoute: typeof MecanicosRoute
   NotificacoesRoute: typeof NotificacoesRoute
   NotificacoesInternasRoute: typeof NotificacoesInternasRoute
+  OrcamentosRoute: typeof OrcamentosRoute
   PatioRoute: typeof PatioRoute
   PecasRoute: typeof PecasRoute
   RelatoriosRoute: typeof RelatoriosRoute
@@ -290,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotificacoesInternasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/orcamentos': {
+      id: '/orcamentos'
+      path: '/orcamentos'
+      fullPath: '/orcamentos'
+      preLoaderRoute: typeof OrcamentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/patio': {
       id: '/patio'
       path: '/patio'
@@ -345,6 +365,7 @@ const rootRouteChildren: RootRouteChildren = {
   MecanicosRoute: MecanicosRoute,
   NotificacoesRoute: NotificacoesRoute,
   NotificacoesInternasRoute: NotificacoesInternasRoute,
+  OrcamentosRoute: OrcamentosRoute,
   PatioRoute: PatioRoute,
   PecasRoute: PecasRoute,
   RelatoriosRoute: RelatoriosRoute,
