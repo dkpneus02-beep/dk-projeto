@@ -36,7 +36,6 @@ export function homeRouteFor(role: Role | null): string {
 
 const NAV_GERENTE: NavKey[] = [
   "dashboard",
-  "orcamentos",
   "patio",
   "historico",
   "notificacoes-internas",
@@ -45,6 +44,7 @@ const NAV_GERENTE: NavKey[] = [
   "notificacoes",
   "relatorios",
   "mecanicos",
+  "orcamentos",
   "configuracoes",
   "backup",
 ];

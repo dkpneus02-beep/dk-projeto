@@ -12,6 +12,17 @@ export function maskPhone(value: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
+/** Máscara dinâmica: CPF até 11 dígitos e CNPJ automaticamente a partir do 12º. */
+export function maskDocument(value: string): string {
+  const d = onlyDigits(value).slice(0, 14);
+  if (d.length <= 11) return maskCPF(d);
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
 /** Máscara de CPF: 000.000.000-00. */
 export function maskCPF(value: string): string {
   const d = onlyDigits(value).slice(0, 11);

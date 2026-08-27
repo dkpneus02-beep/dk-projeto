@@ -38,8 +38,13 @@ function AuthPage() {
     setCarregando(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
     setCarregando(false);
-    if (error) toast.error("E-mail ou senha inválidos.");
-    // Sucesso: o useEffect acima cuida do redirecionamento assim que a role carregar.
+    if (error) {
+      toast.error("E-mail ou senha inválidos.");
+      return;
+    }
+    // A sessão já foi criada; navegação explícita evita ficar presa na tela de login
+    // enquanto o perfil e a role terminam de carregar no AuthProvider.
+    void navigate({ to: "/" });
   };
 
   const enviarRecuperacao = async (e: React.FormEvent) => {

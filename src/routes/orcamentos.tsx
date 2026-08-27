@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { brl, matches } from "@/lib/format";
+import { maskDocument, maskPhone } from "@/lib/masks";
 
 export const Route = createFileRoute("/orcamentos")({
   head: () => ({
@@ -99,6 +107,7 @@ type Draft = Omit<
   expires_at?: string;
   os_id?: string | null;
   itens: Item[];
+  pagamento_pix?: boolean;
 };
 
 const novoDraft = (): Draft => ({
@@ -112,6 +121,7 @@ const novoDraft = (): Draft => ({
   observacao: "",
   desconto: 0,
   itens: [],
+  pagamento_pix: false,
 });
 
 function diasRestantes(expiresAt: string) {
@@ -132,6 +142,7 @@ function Orcamentos() {
   const [pecaBusca, setPecaBusca] = useState("");
   const [servicoBusca, setServicoBusca] = useState("");
   const [draft, setDraft] = useState<Draft>(novoDraft());
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const { data: orcamentos = [], isLoading } = useQuery({
     queryKey: ["orcamentos"],
@@ -204,18 +215,18 @@ function Orcamentos() {
     [orcamentos, busca],
   );
   const pecasFiltradas = useMemo(
-    () => pecas.filter((p) => matches(pecaBusca, [p.nome, p.sku, p.marca])).slice(0, 8),
+    () => pecas.filter((p) => matches(pecaBusca, [p.nome, p.sku, p.marca])),
     [pecas, pecaBusca],
   );
   const servicosFiltrados = useMemo(
-    () => catalogo.filter((s) => matches(servicoBusca, [s.nome])).slice(0, 8),
+    () => catalogo.filter((s) => matches(servicoBusca, [s.nome])),
     [catalogo, servicoBusca],
   );
 
   const totais = useMemo(() => {
     const pecasTotal = valorItens(draft.itens, "peca");
     const maoDeObraTotal = valorItens(draft.itens, "mao_de_obra");
-    const desconto = Math.max(Number(draft.desconto || 0), 0);
+    const desconto = draft.pagamento_pix ? pecasTotal * 0.25 : 0;
     return {
       pecasTotal,
       maoDeObraTotal,
@@ -242,6 +253,7 @@ function Orcamentos() {
         cor: draft.cor?.trim() || null,
         observacao: draft.observacao?.trim() || null,
         desconto: totais.desconto,
+        pagamento_pix: Boolean(draft.pagamento_pix),
       };
       const itens = draft.itens.map((item, index) => ({
         tipo: item.tipo,
@@ -263,6 +275,7 @@ function Orcamentos() {
     onSuccess: (saved) => {
       toast.success(`Orçamento #${saved.numero} salvo por 15 dias.`);
       setDraft(novoDraft());
+      setEditorOpen(false);
       void qc.invalidateQueries({ queryKey: ["orcamentos"] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -334,8 +347,14 @@ function Orcamentos() {
     }));
   const removerItem = (index: number) =>
     setDraft((atual) => ({ ...atual, itens: atual.itens.filter((_, i) => i !== index) }));
-  const editar = (item: Orcamento) =>
-    setDraft({ ...item, itens: (item.orcamento_itens ?? []).sort((a, b) => a.ordem - b.ordem) });
+  const editar = (item: Orcamento) => {
+    setDraft({
+      ...item,
+      pagamento_pix: Number(item.desconto || 0) > 0,
+      itens: (item.orcamento_itens ?? []).sort((a, b) => a.ordem - b.ordem),
+    });
+    setEditorOpen(true);
+  };
 
   const gerarPdf = () => {
     const now = new Date();
@@ -348,7 +367,7 @@ function Orcamentos() {
             `<tr><td>${String(index + 1).padStart(2, "0")}</td><td>${esc(item.descricao)}</td><td>${item.quantidade}</td><td>${brl(item.valor_unitario)}</td><td>${brl(item.valor_total)}</td></tr>`,
         )
         .join("");
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento #${numero}</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#242424;font-size:10px;margin:0}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #a31525;padding-bottom:8px}header img{width:70px}header .office{text-align:right;font-size:9px;line-height:1.45}h1{font-size:12px;margin:0;text-transform:uppercase}.band{background:#171717;color:#fff;padding:8px 10px;margin:10px 0;display:flex;justify-content:space-between;font-weight:bold}.band span{font-weight:normal;font-size:9px;line-height:1.4;text-align:right}.boxes{display:grid;grid-template-columns:1fr 1fr;gap:8px}.box{border:1px solid #cfcfcf;padding:7px;min-height:70px}.box strong,.section-title{display:block;color:#a31525;font-size:9px;text-transform:uppercase;margin-bottom:5px}.box p{margin:2px 0}.section-title{border:1px solid #cfcfcf;border-bottom:0;padding:5px;margin:10px 0 0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d5d5d5;padding:4px;text-align:left}th{font-size:8px;text-transform:uppercase;background:#f6f6f6}th:nth-child(1),td:nth-child(1){width:28px;text-align:center}th:nth-child(3),td:nth-child(3){width:42px;text-align:center}th:nth-child(n+4),td:nth-child(n+4){text-align:right}.bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:8px;margin-top:10px}.conditions{border:1px solid #cfcfcf;padding:7px;min-height:90px}.conditions p{margin:4px 0}.summary{border:1px solid #cfcfcf;padding:7px}.summary div{display:flex;justify-content:space-between;margin:6px 0}.summary .total{border-top:1px solid #a31525;color:#a31525;font-size:14px;font-weight:bold;padding-top:7px}.foot{border-top:1px solid #cfcfcf;text-align:center;color:#777;font-size:8px;margin-top:14px;padding-top:5px}@media print{.no-print{display:none}}</style></head><body><header><img src="${location.origin}/dk-logo.webp"><div class="office"><h1>${esc(config?.nome_oficina || "DK Auto Center")}</h1><div>${config?.cnpj ? `CNPJ: ${esc(config.cnpj)}` : ""}</div><div>${esc(config?.endereco || "")}</div><div>${config?.telefone ? `Tel: ${esc(config.telefone)}` : ""}</div></div></header><div class="band">ORÇAMENTO Nº ${numero}<span>Data de emissão: ${now.toLocaleDateString("pt-BR")}<br>Validade: 15 dias</span></div><div class="boxes"><div class="box"><strong>Dados do cliente</strong><p>Razão Social: ${esc(draft.cliente_nome || "")}</p><p>CPF/CNPJ: ${esc(draft.cliente_cpf || "")}</p><p>Telefone: ${esc(draft.cliente_telefone || "")}</p></div><div class="box"><strong>Dados do veículo</strong><p>Modelo: ${esc([draft.fabricante, draft.modelo].filter(Boolean).join(" "))}</p><p>Placa: ${esc(draft.placa || "")}</p><p>Cor: ${esc(draft.cor || "")}</p></div></div><div class="section-title">Produtos / peças</div><table><thead><tr><th>Item</th><th>Descrição dos produtos</th><th>Qtd</th><th>Valor unit.</th><th>Valor total</th></tr></thead><tbody>${rows("peca") || '<tr><td colspan="5">Nenhuma peça adicionada.</td></tr>'}</tbody></table><div class="section-title">Mão de obra / serviços</div><table><thead><tr><th>Item</th><th>Descrição do serviço</th><th>Qtd</th><th>Valor unit.</th><th>Valor total</th></tr></thead><tbody>${rows("mao_de_obra") || '<tr><td colspan="5">Nenhum serviço adicionado.</td></tr>'}</tbody></table><div class="bottom"><div class="conditions"><strong class="section-title" style="border:0;padding:0;margin:0">Observações e condições</strong><p>${esc(draft.observacao || "Orçamento válido por 15 dias a partir da data de emissão.")}</p><p>Os valores e condições devem ser confirmados no momento da aprovação do serviço.</p></div><div class="summary"><strong class="section-title" style="border:0;padding:0;margin:0">Resumo financeiro</strong><div><span>Valor bruto:</span><span>${brl(totais.bruto)}</span></div><div><span>Desconto:</span><span>- ${brl(totais.desconto)}</span></div><div class="total"><span>Subtotal:</span><span>${brl(totais.total)}</span></div></div></div><div class="foot">DK Auto Center · Gestão de oficina · Documento para orçamento</div><p class="no-print" style="text-align:center"><button onclick="window.print()">Imprimir / salvar como PDF</button></p></body></html>`;
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento #${numero}</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#242424;font-size:10px;margin:0}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #a31525;padding-bottom:8px}header img{width:70px}header .office{text-align:right;font-size:9px;line-height:1.45}h1{font-size:12px;margin:0;text-transform:uppercase}.band{background:#171717;color:#fff;padding:8px 10px;margin:10px 0;display:flex;justify-content:space-between;font-weight:bold}.band span{font-weight:normal;font-size:9px;line-height:1.4;text-align:right}.boxes{display:grid;grid-template-columns:1fr 1fr;gap:8px}.box{border:1px solid #cfcfcf;padding:7px;min-height:70px}.box strong,.section-title{display:block;color:#a31525;font-size:9px;text-transform:uppercase;margin-bottom:5px}.box p{margin:2px 0}.section-title{border:1px solid #cfcfcf;border-bottom:0;padding:5px;margin:10px 0 0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d5d5d5;padding:4px;text-align:left}th{font-size:8px;text-transform:uppercase;background:#f6f6f6}th:nth-child(1),td:nth-child(1){width:28px;text-align:center}th:nth-child(3),td:nth-child(3){width:42px;text-align:center}th:nth-child(n+4),td:nth-child(n+4){text-align:right}.bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:8px;margin-top:10px}.conditions{border:1px solid #cfcfcf;padding:7px;min-height:90px}.conditions p{margin:4px 0}.summary{border:1px solid #cfcfcf;padding:7px}.summary div{display:flex;justify-content:space-between;margin:6px 0}.summary .total{border-top:1px solid #a31525;color:#a31525;font-size:14px;font-weight:bold;padding-top:7px}.foot{border-top:1px solid #cfcfcf;text-align:center;color:#777;font-size:8px;margin-top:14px;padding-top:5px}@media print{.no-print{display:none}}</style></head><body><header><img src="${location.origin}/dk-logo.webp"><div class="office"><h1>${esc(config?.nome_oficina || "DK Auto Center")}</h1><div>${config?.cnpj ? `CNPJ: ${esc(config.cnpj)}` : ""}</div><div>${esc(config?.endereco || "")}</div><div>${config?.telefone ? `Tel: ${esc(config.telefone)}` : ""}</div></div></header><div class="band">ORÇAMENTO Nº ${numero}<span>Data de emissão: ${now.toLocaleDateString("pt-BR")}<br>Validade: 15 dias</span></div><div class="boxes"><div class="box"><strong>Dados do cliente</strong><p>Razão Social: ${esc(draft.cliente_nome || "")}</p><p>CPF/CNPJ: ${esc(draft.cliente_cpf || "")}</p><p>Telefone: ${esc(draft.cliente_telefone || "")}</p></div><div class="box"><strong>Dados do veículo</strong><p>Modelo: ${esc([draft.fabricante, draft.modelo].filter(Boolean).join(" "))}</p><p>Placa: ${esc(draft.placa || "")}</p><p>Cor: ${esc(draft.cor || "")}</p></div></div><div class="section-title">Produtos / peças</div><table><thead><tr><th>Item</th><th>Descrição dos produtos</th><th>Qtd</th><th>Valor unit.</th><th>Valor total</th></tr></thead><tbody>${rows("peca") || '<tr><td colspan="5">Nenhuma peça adicionada.</td></tr>'}</tbody></table><div class="section-title">Mão de obra / serviços</div><table><thead><tr><th>Item</th><th>Descrição do serviço</th><th>Qtd</th><th>Valor unit.</th><th>Valor total</th></tr></thead><tbody>${rows("mao_de_obra") || '<tr><td colspan="5">Nenhum serviço adicionado.</td></tr>'}</tbody></table><div class="bottom"><div class="conditions"><strong class="section-title" style="border:0;padding:0;margin:0">Observações e condições</strong><p>${esc(draft.observacao || "Orçamento válido por 15 dias a partir da data de emissão.")}</p><p>${draft.pagamento_pix ? "Pagamento via Pix: desconto de 25% aplicado exclusivamente sobre o subtotal de peças. A mão de obra permanece sem desconto." : "Desconto Pix não selecionado. O desconto, quando aplicável, incide somente sobre peças."}</p><p>Os valores e condições devem ser confirmados no momento da aprovação do serviço.</p></div><div class="summary"><strong class="section-title" style="border:0;padding:0;margin:0">Resumo financeiro</strong><div><span>Valor bruto:</span><span>${brl(totais.bruto)}</span></div><div><span>${draft.pagamento_pix ? "Desconto Pix (25% peças):" : "Desconto:"}</span><span>- ${brl(totais.desconto)}</span></div><div><span>Peças após desconto:</span><span>${brl(Math.max(totais.pecasTotal - totais.desconto, 0))}</span></div><div class="total"><span>Total:</span><span>${brl(totais.total)}</span></div></div></div><div class="foot">DK Auto Center · Gestão de oficina · Documento para orçamento</div><p class="no-print" style="text-align:center"><button onclick="window.print()">Imprimir / salvar como PDF</button></p></body></html>`;
     const win = window.open("", "_blank", "width=900,height=900");
     if (!win) {
       toast.error("Permita janelas pop-up para gerar o PDF.");
@@ -374,20 +393,16 @@ function Orcamentos() {
   return (
     <AppShell>
       <PageHeader title="Orçamentos" subtitle="Composição rápida, clara e válida por 15 dias">
-        <Button variant="outline" onClick={() => setDraft(novoDraft())}>
-          <i className="fa-solid fa-plus" /> Novo orçamento
-        </Button>
-        <Button variant="outline" onClick={gerarPdf} disabled={draft.itens.length === 0}>
-          <i className="fa-solid fa-file-pdf" /> PDF
-        </Button>
         <Button
-          onClick={() => salvar.mutate()}
-          disabled={salvar.isPending || draft.status === "convertido" || draft.itens.length === 0}
+          onClick={() => {
+            setDraft(novoDraft());
+            setEditorOpen(true);
+          }}
         >
-          {salvar.isPending ? "Salvando…" : "Salvar orçamento"}
+          <i className="fa-solid fa-plus" /> Criar orçamento
         </Button>
       </PageHeader>
-      <div className="grid gap-6 xl:grid-cols-[300px_1fr]">
+      <div className="max-w-3xl">
         <Card className="h-fit">
           <CardHeader>
             <CardTitle className="font-display text-xl uppercase">Salvos</CardTitle>
@@ -452,301 +467,341 @@ function Orcamentos() {
             })}
           </CardContent>
         </Card>
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-display text-xl uppercase">
-                Dados do orçamento {draft.numero ? `#${draft.numero}` : "novo"}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Cliente e veículo são opcionais. Preencha somente o que já estiver disponível.
-              </p>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <Label>Cliente</Label>
-                <Input
-                  value={draft.cliente_nome ?? ""}
-                  onChange={(e) => setDraft({ ...draft, cliente_nome: e.target.value })}
-                  placeholder="Nome ou razão social"
-                />
-              </div>
-              <div>
-                <Label>Telefone</Label>
-                <Input
-                  value={draft.cliente_telefone ?? ""}
-                  onChange={(e) => setDraft({ ...draft, cliente_telefone: e.target.value })}
-                  placeholder="(87) 99999-0000"
-                />
-              </div>
-              <div>
-                <Label>CPF/CNPJ</Label>
-                <Input
-                  value={draft.cliente_cpf ?? ""}
-                  onChange={(e) => setDraft({ ...draft, cliente_cpf: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Placa</Label>
-                <Input
-                  value={draft.placa ?? ""}
-                  onChange={(e) => setDraft({ ...draft, placa: e.target.value })}
-                  placeholder="ABC1D23"
-                />
-              </div>
-              <div>
-                <Label>Fabricante</Label>
-                <Input
-                  value={draft.fabricante ?? ""}
-                  onChange={(e) => setDraft({ ...draft, fabricante: e.target.value })}
-                  placeholder="Fiat"
-                />
-              </div>
-              <div>
-                <Label>Modelo</Label>
-                <Input
-                  value={draft.modelo ?? ""}
-                  onChange={(e) => setDraft({ ...draft, modelo: e.target.value })}
-                  placeholder="Modelo do veículo"
-                />
-              </div>
-              <div>
-                <Label>Cor</Label>
-                <Input
-                  value={draft.cor ?? ""}
-                  onChange={(e) => setDraft({ ...draft, cor: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label>Desconto (R$)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={draft.desconto}
-                  onChange={(e) => setDraft({ ...draft, desconto: Number(e.target.value) })}
-                />
-              </div>
-            </CardContent>
-          </Card>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="font-display text-lg uppercase">Produtos / peças</CardTitle>
-                <Input
-                  value={pecaBusca}
-                  onChange={(e) => setPecaBusca(e.target.value)}
-                  placeholder="Buscar peça, código ou marca"
-                />
-              </CardHeader>
-              <CardContent className="space-y-2 pt-0">
-                {pecasFiltradas.map((peca) => (
-                  <button
-                    key={peca.id}
-                    onClick={() => {
-                      adicionarItem("peca", {
-                        peca_id: peca.id,
-                        descricao: [peca.nome, peca.marca].filter(Boolean).join(" · "),
-                        valor_unitario: Number(peca.preco_venda),
-                      });
-                      setPecaBusca("");
-                    }}
-                    className="flex w-full items-center justify-between rounded border p-2 text-left text-sm hover:border-primary"
-                  >
-                    <span>
-                      <strong>{peca.nome}</strong>
-                      <span className="block text-xs text-muted-foreground">
-                        {peca.sku || "Sem código"} · estoque {peca.estoque}
-                      </span>
-                    </span>
-                    <span className="font-semibold">{brl(peca.preco_venda)}</span>
-                  </button>
-                ))}
-                {pecaBusca && pecasFiltradas.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Nenhuma peça encontrada.</p>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="font-display text-lg uppercase">
-                  Mão de obra / serviços
-                </CardTitle>
-                <Input
-                  value={servicoBusca}
-                  onChange={(e) => setServicoBusca(e.target.value)}
-                  placeholder="Buscar serviço"
-                />
-              </CardHeader>
-              <CardContent className="space-y-2 pt-0">
-                {servicosFiltrados.map((servico) => (
-                  <button
-                    key={servico.id}
-                    onClick={() => {
-                      adicionarItem("mao_de_obra", {
-                        servico_id: servico.id,
-                        descricao: servico.nome,
-                        valor_unitario: Number(servico.preco_padrao),
-                      });
-                      setServicoBusca("");
-                    }}
-                    className="flex w-full items-center justify-between rounded border p-2 text-left text-sm hover:border-primary"
-                  >
-                    <span>{servico.nome}</span>
-                    <span className="font-semibold">{brl(servico.preco_padrao)}</span>
-                  </button>
-                ))}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Outro serviço"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                        adicionarItem("mao_de_obra", {
-                          descricao: e.currentTarget.value.trim(),
-                          valor_unitario: 0,
-                        });
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                  />
-                  <Badge variant="outline">Enter para adicionar</Badge>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="font-display text-lg uppercase">Itens do orçamento</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {draft.itens.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  Selecione peças ou serviços acima para começar.
-                </p>
-              )}
-              {draft.itens.map((item, index) => (
-                <div
-                  key={`${item.id ?? "novo"}-${index}`}
-                  className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_90px_120px_120px_auto] md:items-end"
-                >
+        <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+          <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="font-display text-2xl uppercase">
+                {draft.numero ? `Editar orçamento #${draft.numero}` : "Novo orçamento"}
+              </DialogTitle>
+              <DialogDescription>
+                Preencha somente o que já estiver disponível. Cliente e veículo são opcionais.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="font-display text-xl uppercase">
+                    Dados do orçamento {draft.numero ? `#${draft.numero}` : "novo"}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Cliente e veículo são opcionais. Preencha somente o que já estiver disponível.
+                  </p>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <Badge variant="outline" className="mb-1">
-                      {item.tipo === "peca" ? "Peça" : "Mão de obra"}
-                    </Badge>
+                    <Label>Cliente</Label>
                     <Input
-                      value={item.descricao}
-                      onChange={(e) => editarItem(index, { descricao: e.target.value })}
+                      value={draft.cliente_nome ?? ""}
+                      onChange={(e) => setDraft({ ...draft, cliente_nome: e.target.value })}
+                      placeholder="Nome ou razão social"
                     />
                   </div>
                   <div>
-                    <Label>Qtd.</Label>
+                    <Label>Telefone</Label>
                     <Input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.quantidade}
-                      onChange={(e) => editarItem(index, { quantidade: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Unitário</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.valor_unitario}
+                      value={draft.cliente_telefone ?? ""}
                       onChange={(e) =>
-                        editarItem(index, { valor_unitario: Number(e.target.value) })
+                        setDraft({ ...draft, cliente_telefone: maskPhone(e.target.value) })
                       }
+                      placeholder="(87) 99999-0000"
                     />
                   </div>
                   <div>
-                    <Label>Total</Label>
-                    <Input value={brl(item.valor_total)} readOnly />
+                    <Label>CPF/CNPJ</Label>
+                    <Input
+                      value={draft.cliente_cpf ?? ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, cliente_cpf: maskDocument(e.target.value) })
+                      }
+                      placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                      inputMode="numeric"
+                    />
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="Remover item"
-                    onClick={() => removerItem(index)}
-                  >
-                    <i className="fa-solid fa-trash" />
-                  </Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_280px]">
-              <div>
-                <Label>Observações e condições</Label>
-                <Textarea
-                  value={draft.observacao ?? ""}
-                  onChange={(e) => setDraft({ ...draft, observacao: e.target.value })}
-                  placeholder="Condições, prazo, observações para o cliente…"
-                />
+                  <div>
+                    <Label>Placa</Label>
+                    <Input
+                      value={draft.placa ?? ""}
+                      onChange={(e) => setDraft({ ...draft, placa: e.target.value })}
+                      placeholder="ABC1D23"
+                    />
+                  </div>
+                  <div>
+                    <Label>Fabricante</Label>
+                    <Input
+                      value={draft.fabricante ?? ""}
+                      onChange={(e) => setDraft({ ...draft, fabricante: e.target.value })}
+                      placeholder="Fiat"
+                    />
+                  </div>
+                  <div>
+                    <Label>Modelo</Label>
+                    <Input
+                      value={draft.modelo ?? ""}
+                      onChange={(e) => setDraft({ ...draft, modelo: e.target.value })}
+                      placeholder="Modelo do veículo"
+                    />
+                  </div>
+                  <div>
+                    <Label>Cor</Label>
+                    <Input
+                      value={draft.cor ?? ""}
+                      onChange={(e) => setDraft({ ...draft, cor: e.target.value })}
+                    />
+                  </div>
+                  <div className="rounded-md border border-primary/30 bg-primary/5 p-3 lg:col-span-2">
+                    <label className="flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(draft.pagamento_pix)}
+                        onChange={(e) => setDraft({ ...draft, pagamento_pix: e.target.checked })}
+                        className="mt-1 h-4 w-4 accent-primary"
+                      />
+                      <span>
+                        <strong className="block text-sm">Pagamento via Pix</strong>
+                        <span className="text-xs text-muted-foreground">
+                          Desconto de 25% aplicado somente sobre peças. A mão de obra não recebe
+                          desconto.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                </CardContent>
+              </Card>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display text-lg uppercase">
+                      Produtos / peças
+                    </CardTitle>
+                    <Input
+                      value={pecaBusca}
+                      onChange={(e) => setPecaBusca(e.target.value)}
+                      placeholder="Buscar peça, código ou marca"
+                    />
+                  </CardHeader>
+                  <CardContent className="space-y-2 pt-0">
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                      {pecasFiltradas.map((peca) => (
+                        <button
+                          key={peca.id}
+                          onClick={() => {
+                            adicionarItem("peca", {
+                              peca_id: peca.id,
+                              descricao: [peca.nome, peca.marca].filter(Boolean).join(" · "),
+                              valor_unitario: Number(peca.preco_venda),
+                            });
+                            setPecaBusca("");
+                          }}
+                          className="flex w-full items-center justify-between rounded border p-2 text-left text-sm hover:border-primary"
+                        >
+                          <span>
+                            <strong>{peca.nome}</strong>
+                            <span className="block text-xs text-muted-foreground">
+                              {peca.sku || "Sem código"} · estoque {peca.estoque}
+                            </span>
+                          </span>
+                          <span className="font-semibold">{brl(peca.preco_venda)}</span>
+                        </button>
+                      ))}
+                      {pecaBusca && pecasFiltradas.length === 0 && (
+                        <p className="text-sm text-muted-foreground">Nenhuma peça encontrada.</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-display text-lg uppercase">
+                      Mão de obra / serviços
+                    </CardTitle>
+                    <Input
+                      value={servicoBusca}
+                      onChange={(e) => setServicoBusca(e.target.value)}
+                      placeholder="Buscar serviço"
+                    />
+                  </CardHeader>
+                  <CardContent className="space-y-2 pt-0">
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                      {servicosFiltrados.map((servico) => (
+                        <button
+                          key={servico.id}
+                          onClick={() => {
+                            adicionarItem("mao_de_obra", {
+                              servico_id: servico.id,
+                              descricao: servico.nome,
+                              valor_unitario: Number(servico.preco_padrao),
+                            });
+                            setServicoBusca("");
+                          }}
+                          className="flex w-full items-center justify-between rounded border p-2 text-left text-sm hover:border-primary"
+                        >
+                          <span>{servico.nome}</span>
+                          <span className="font-semibold">{brl(servico.preco_padrao)}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Outro serviço"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                            adicionarItem("mao_de_obra", {
+                              descricao: e.currentTarget.value.trim(),
+                              valor_unitario: 0,
+                            });
+                            e.currentTarget.value = "";
+                          }
+                        }}
+                      />
+                      <Badge variant="outline">Enter para adicionar</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-              <div className="rounded-md border bg-muted/20 p-4 text-sm">
-                <div className="flex justify-between">
-                  <span>Produtos / peças</span>
-                  <strong>{brl(totais.pecasTotal)}</strong>
-                </div>
-                <div className="mt-2 flex justify-between">
-                  <span>Mão de obra</span>
-                  <strong>{brl(totais.maoDeObraTotal)}</strong>
-                </div>
-                <div className="mt-2 flex justify-between">
-                  <span>Desconto</span>
-                  <strong>- {brl(totais.desconto)}</strong>
-                </div>
-                <div className="mt-3 flex justify-between border-t pt-3 text-lg font-bold text-primary">
-                  <span>Total</span>
-                  <strong>{brl(totais.total)}</strong>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={gerarPdf} disabled={!draft.itens.length}>
-                    <i className="fa-solid fa-file-pdf" /> Gerar PDF
-                  </Button>
-                  {draft.id && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Excluir este orçamento definitivamente? Esta ação não pode ser desfeita.",
-                          )
-                        )
-                          excluir.mutate(draft.id!);
-                      }}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="font-display text-lg uppercase">
+                    Itens do orçamento
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {draft.itens.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Selecione peças ou serviços acima para começar.
+                    </p>
+                  )}
+                  {draft.itens.map((item, index) => (
+                    <div
+                      key={`${item.id ?? "novo"}-${index}`}
+                      className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_90px_120px_120px_auto] md:items-end"
                     >
-                      <i className="fa-solid fa-trash" /> Excluir
-                    </Button>
-                  )}
-                  {draft.id && draft.status !== "convertido" && (
-                    <Button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            "Iniciar uma OS com os dados deste orçamento? O orçamento não baixará estoque nem lançará caixa.",
-                          )
-                        )
-                          iniciarServico.mutate(draft.id!);
-                      }}
-                      disabled={iniciarServico.isPending}
-                    >
-                      {iniciarServico.isPending ? "Iniciando…" : "Iniciar serviço"}
-                    </Button>
-                  )}
-                  {draft.id && draft.status === "convertido" && (
-                    <Button variant="outline" disabled>
-                      OS já iniciada
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                      <div>
+                        <Badge variant="outline" className="mb-1">
+                          {item.tipo === "peca" ? "Peça" : "Mão de obra"}
+                        </Badge>
+                        <Input
+                          value={item.descricao}
+                          onChange={(e) => editarItem(index, { descricao: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>Qtd.</Label>
+                        <Input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={item.quantidade}
+                          onChange={(e) =>
+                            editarItem(index, { quantidade: Number(e.target.value) })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label>Unitário</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.valor_unitario}
+                          onChange={(e) =>
+                            editarItem(index, { valor_unitario: Number(e.target.value) })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label>Total</Label>
+                        <Input value={brl(item.valor_total)} readOnly />
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Remover item"
+                        onClick={() => removerItem(index)}
+                      >
+                        <i className="fa-solid fa-trash" />
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_280px]">
+                  <div>
+                    <Label>Observações e condições</Label>
+                    <Textarea
+                      value={draft.observacao ?? ""}
+                      onChange={(e) => setDraft({ ...draft, observacao: e.target.value })}
+                      placeholder="Condições, prazo, observações para o cliente…"
+                    />
+                  </div>
+                  <div className="rounded-md border bg-muted/20 p-4 text-sm">
+                    <div className="flex justify-between">
+                      <span>Produtos / peças</span>
+                      <strong>{brl(totais.pecasTotal)}</strong>
+                    </div>
+                    <div className="mt-2 flex justify-between">
+                      <span>Mão de obra</span>
+                      <strong>{brl(totais.maoDeObraTotal)}</strong>
+                    </div>
+                    <div className="mt-2 flex justify-between">
+                      <span>{draft.pagamento_pix ? "Desconto Pix (25% peças)" : "Desconto"}</span>
+                      <strong>- {brl(totais.desconto)}</strong>
+                    </div>
+                    {draft.pagamento_pix && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Desconto exclusivo para pagamento via Pix e aplicado somente nas peças.
+                      </p>
+                    )}
+                    <div className="mt-3 flex justify-between border-t pt-3 text-lg font-bold text-primary">
+                      <span>Total</span>
+                      <strong>{brl(totais.total)}</strong>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button variant="outline" onClick={gerarPdf} disabled={!draft.itens.length}>
+                        <i className="fa-solid fa-file-pdf" /> Gerar PDF
+                      </Button>
+                      {draft.id && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Excluir este orçamento definitivamente? Esta ação não pode ser desfeita.",
+                              )
+                            )
+                              excluir.mutate(draft.id!);
+                          }}
+                        >
+                          <i className="fa-solid fa-trash" /> Excluir
+                        </Button>
+                      )}
+                      {draft.id && draft.status !== "convertido" && (
+                        <Button
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "Iniciar uma OS com os dados deste orçamento? O orçamento não baixará estoque nem lançará caixa.",
+                              )
+                            )
+                              iniciarServico.mutate(draft.id!);
+                          }}
+                          disabled={iniciarServico.isPending}
+                        >
+                          {iniciarServico.isPending ? "Iniciando…" : "Iniciar serviço"}
+                        </Button>
+                      )}
+                      {draft.id && draft.status === "convertido" && (
+                        <Button variant="outline" disabled>
+                          OS já iniciada
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppShell>
   );
