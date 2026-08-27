@@ -72,10 +72,18 @@ type Orcamento = {
   cliente_nome: string | null;
   cliente_telefone: string | null;
   cliente_cpf: string | null;
+  cliente_endereco: string | null;
+  cliente_bairro_cidade: string | null;
+  cliente_email: string | null;
   placa: string | null;
+  placa_anterior: string | null;
   fabricante: string | null;
   modelo: string | null;
+  veiculo_especie_tipo: string | null;
+  ano_fabricacao_modelo: string | null;
+  cilindrada: string | null;
   cor: string | null;
+  chassi: string | null;
   observacao: string | null;
   desconto: number;
   subtotal_pecas: number;
@@ -114,10 +122,18 @@ const novoDraft = (): Draft => ({
   cliente_nome: "",
   cliente_telefone: "",
   cliente_cpf: "",
+  cliente_endereco: "",
+  cliente_bairro_cidade: "",
+  cliente_email: "",
   placa: "",
+  placa_anterior: "",
   fabricante: "",
   modelo: "",
+  veiculo_especie_tipo: "",
+  ano_fabricacao_modelo: "",
+  cilindrada: "",
   cor: "",
+  chassi: "",
   observacao: "",
   desconto: 0,
   itens: [],
@@ -234,7 +250,7 @@ function Orcamentos() {
       desconto,
       total: Math.max(pecasTotal + maoDeObraTotal - desconto, 0),
     };
-  }, [draft.itens, draft.desconto]);
+  }, [draft.itens, draft.pagamento_pix]);
 
   const salvar = useMutation({
     mutationFn: async () => {
@@ -247,10 +263,18 @@ function Orcamentos() {
         cliente_nome: draft.cliente_nome?.trim() || null,
         cliente_telefone: draft.cliente_telefone?.trim() || null,
         cliente_cpf: draft.cliente_cpf?.trim() || null,
+        cliente_endereco: draft.cliente_endereco?.trim() || null,
+        cliente_bairro_cidade: draft.cliente_bairro_cidade?.trim() || null,
+        cliente_email: draft.cliente_email?.trim() || null,
         placa: draft.placa?.trim() || null,
+        placa_anterior: draft.placa_anterior?.trim() || null,
         fabricante: draft.fabricante?.trim() || null,
         modelo: draft.modelo?.trim() || null,
+        veiculo_especie_tipo: draft.veiculo_especie_tipo?.trim() || null,
+        ano_fabricacao_modelo: draft.ano_fabricacao_modelo?.trim() || null,
+        cilindrada: draft.cilindrada?.trim() || null,
         cor: draft.cor?.trim() || null,
+        chassi: draft.chassi?.trim() || null,
         observacao: draft.observacao?.trim() || null,
         desconto: totais.desconto,
         pagamento_pix: Boolean(draft.pagamento_pix),
@@ -356,18 +380,38 @@ function Orcamentos() {
     setEditorOpen(true);
   };
 
-  const gerarPdf = () => {
+  const gerarPdf = async () => {
+    const currentDraft = draft;
+    let pdfDraft = currentDraft;
+    try {
+      const saved = await salvar.mutateAsync();
+      pdfDraft = { ...currentDraft, ...saved, itens: currentDraft.itens };
+    } catch {
+      return;
+    }
     const now = new Date();
-    const numero = draft.numero ?? "novo";
+    const numero = pdfDraft.numero ?? "novo";
+    const display = (value: string | null | undefined) => esc(value?.trim() || "Não informado");
+    let itemNumber = 0;
     const rows = (tipo: TipoItem) =>
-      draft.itens
+      pdfDraft.itens
         .filter((item) => item.tipo === tipo)
-        .map(
-          (item, index) =>
-            `<tr><td>${String(index + 1).padStart(2, "0")}</td><td>${esc(item.descricao)}</td><td>${item.quantidade}</td><td>${brl(item.valor_unitario)}</td><td>${brl(item.valor_total)}</td></tr>`,
-        )
+        .map((item) => {
+          itemNumber += 1;
+          return `<tr><td class="item-no">${String(itemNumber).padStart(2, "0")}</td><td class="description">${esc(item.descricao)}</td><td class="center">${item.quantidade}</td><td class="money">${brl(item.valor_unitario)}</td><td class="money">${brl(item.valor_total)}</td></tr>`;
+        })
         .join("");
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento #${numero}</title><style>@page{size:A4;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#242424;font-size:10px;margin:0}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #a31525;padding-bottom:8px}header img{width:70px}header .office{text-align:right;font-size:9px;line-height:1.45}h1{font-size:12px;margin:0;text-transform:uppercase}.band{background:#171717;color:#fff;padding:8px 10px;margin:10px 0;display:flex;justify-content:space-between;font-weight:bold}.band span{font-weight:normal;font-size:9px;line-height:1.4;text-align:right}.boxes{display:grid;grid-template-columns:1fr 1fr;gap:8px}.box{border:1px solid #cfcfcf;padding:7px;min-height:70px}.box strong,.section-title{display:block;color:#a31525;font-size:9px;text-transform:uppercase;margin-bottom:5px}.box p{margin:2px 0}.section-title{border:1px solid #cfcfcf;border-bottom:0;padding:5px;margin:10px 0 0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d5d5d5;padding:4px;text-align:left}th{font-size:8px;text-transform:uppercase;background:#f6f6f6}th:nth-child(1),td:nth-child(1){width:28px;text-align:center}th:nth-child(3),td:nth-child(3){width:42px;text-align:center}th:nth-child(n+4),td:nth-child(n+4){text-align:right}.bottom{display:grid;grid-template-columns:1.2fr .8fr;gap:8px;margin-top:10px}.conditions{border:1px solid #cfcfcf;padding:7px;min-height:90px}.conditions p{margin:4px 0}.summary{border:1px solid #cfcfcf;padding:7px}.summary div{display:flex;justify-content:space-between;margin:6px 0}.summary .total{border-top:1px solid #a31525;color:#a31525;font-size:14px;font-weight:bold;padding-top:7px}.foot{border-top:1px solid #cfcfcf;text-align:center;color:#777;font-size:8px;margin-top:14px;padding-top:5px}@media print{.no-print{display:none}}</style></head><body><header><img src="${location.origin}/dk-logo.webp"><div class="office"><h1>${esc(config?.nome_oficina || "DK Auto Center")}</h1><div>${config?.cnpj ? `CNPJ: ${esc(config.cnpj)}` : ""}</div><div>${esc(config?.endereco || "")}</div><div>${config?.telefone ? `Tel: ${esc(config.telefone)}` : ""}</div></div></header><div class="band">ORÇAMENTO Nº ${numero}<span>Data de emissão: ${now.toLocaleDateString("pt-BR")}<br>Validade: 15 dias</span></div><div class="boxes"><div class="box"><strong>Dados do cliente</strong><p>Razão Social: ${esc(draft.cliente_nome || "")}</p><p>CPF/CNPJ: ${esc(draft.cliente_cpf || "")}</p><p>Telefone: ${esc(draft.cliente_telefone || "")}</p></div><div class="box"><strong>Dados do veículo</strong><p>Modelo: ${esc([draft.fabricante, draft.modelo].filter(Boolean).join(" "))}</p><p>Placa: ${esc(draft.placa || "")}</p><p>Cor: ${esc(draft.cor || "")}</p></div></div><div class="section-title">Produtos / peças</div><table><thead><tr><th>Item</th><th>Descrição dos produtos</th><th>Qtd</th><th>Valor unit.</th><th>Valor total</th></tr></thead><tbody>${rows("peca") || '<tr><td colspan="5">Nenhuma peça adicionada.</td></tr>'}</tbody></table><div class="section-title">Mão de obra / serviços</div><table><thead><tr><th>Item</th><th>Descrição do serviço</th><th>Qtd</th><th>Valor unit.</th><th>Valor total</th></tr></thead><tbody>${rows("mao_de_obra") || '<tr><td colspan="5">Nenhum serviço adicionado.</td></tr>'}</tbody></table><div class="bottom"><div class="conditions"><strong class="section-title" style="border:0;padding:0;margin:0">Observações e condições</strong><p>${esc(draft.observacao || "Orçamento válido por 15 dias a partir da data de emissão.")}</p><p>${draft.pagamento_pix ? "Pagamento via Pix: desconto de 25% aplicado exclusivamente sobre o subtotal de peças. A mão de obra permanece sem desconto." : "Desconto Pix não selecionado. O desconto, quando aplicável, incide somente sobre peças."}</p><p>Os valores e condições devem ser confirmados no momento da aprovação do serviço.</p></div><div class="summary"><strong class="section-title" style="border:0;padding:0;margin:0">Resumo financeiro</strong><div><span>Valor bruto:</span><span>${brl(totais.bruto)}</span></div><div><span>${draft.pagamento_pix ? "Desconto Pix (25% peças):" : "Desconto:"}</span><span>- ${brl(totais.desconto)}</span></div><div><span>Peças após desconto:</span><span>${brl(Math.max(totais.pecasTotal - totais.desconto, 0))}</span></div><div class="total"><span>Total:</span><span>${brl(totais.total)}</span></div></div></div><div class="foot">DK Auto Center · Gestão de oficina · Documento para orçamento</div><p class="no-print" style="text-align:center"><button onclick="window.print()">Imprimir / salvar como PDF</button></p></body></html>`;
+    const section = (tipo: TipoItem, title: string, empty: string) => {
+      const content = rows(tipo);
+      return `<div class="section-title">${title}</div><table><thead><tr><th class="item-no">ITEM</th><th>DESCRIÇÃO</th><th class="center">QTD</th><th class="money">VALOR UNIT.<br>(R$)</th><th class="money">VALOR TOTAL<br>(R$)</th></tr></thead><tbody>${content || `<tr><td colspan="5" class="empty">${empty}</td></tr>`}</tbody></table>`;
+    };
+    const descontoLabel = pdfDraft.pagamento_pix ? "Desconto especial Pix (25%)" : "Desconto Pix";
+    const descontoText = pdfDraft.pagamento_pix
+      ? `Aplicado exclusivamente sobre o valor original das peças (${brl(totais.pecasTotal)}), reduzindo o subtotal das peças para ${brl(Math.max(totais.pecasTotal - totais.desconto, 0))}. A mão de obra (${brl(totais.maoDeObraTotal)}) não participa da base de cálculo.`
+      : "Não aplicado neste orçamento. Quando selecionado, incide exclusivamente sobre peças.";
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento #${numero}</title><style>
+      @page{size:A4;margin:11mm}*{box-sizing:border-box}body{font-family:Arial,"Helvetica Neue",sans-serif;color:#26313d;font-size:10px;line-height:1.35;margin:0;background:#fff}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #a62f38;padding:2px 0 10px;margin-bottom:12px}header img{width:72px;height:auto}header .office{text-align:right;line-height:1.45;color:#374151}header h1{font-size:17px;letter-spacing:.5px;color:#9d2933;margin:0 0 2px;text-transform:uppercase}header strong{color:#26313d}.band{background:#1d1d1d;color:#fff;border-radius:3px;padding:10px 14px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:700;letter-spacing:.4px}.band span{font-size:10px;font-weight:400;line-height:1.55;text-align:right;letter-spacing:0}.boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}.box{border:1px solid #d7dbe0;border-radius:2px;padding:10px 12px;min-height:136px}.box strong,.section-title{display:block;color:#9d2933;font-weight:700;letter-spacing:.5px;text-transform:uppercase}.box strong{font-size:11px;border-bottom:1px solid #dfe3e7;padding-bottom:6px;margin-bottom:7px}.box p{margin:3px 0;font-size:10px}.section-title{font-size:11px;margin:11px 0 0;padding:6px 9px;border:1px solid #d7dbe0;border-bottom:0;background:#fff}table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 7px}th,td{border:1px solid #d7dbe0;padding:6px 7px;vertical-align:middle}th{background:#25364d;color:#fff;font-size:8.5px;text-align:left;letter-spacing:.25px}td{font-size:10px}tbody tr:nth-child(even){background:#f7f9fb}.item-no{width:45px;text-align:center}.center{width:52px;text-align:center}.money{width:92px;text-align:right;white-space:nowrap}.description{overflow-wrap:anywhere}.empty{text-align:center;color:#687482;padding:10px}.bottom{display:grid;grid-template-columns:1.22fr .78fr;gap:12px;margin-top:11px}.conditions,.summary{border:1px solid #d7dbe0;border-radius:2px;padding:10px 12px}.conditions .section-title,.summary .section-title{border:0;background:transparent;margin:0 0 7px;padding:0}.conditions p{margin:6px 0;font-size:10px}.pix-note{background:#e8f6ef;border-left:4px solid #42a879;border-radius:3px;padding:8px 9px;color:#30634b;margin-top:8px}.summary div{display:flex;justify-content:space-between;gap:10px;margin:7px 0;font-size:10px}.summary .discount{color:#a62f38}.summary .total{border-top:2px solid #a62f38;color:#9d2933;font-size:17px;font-weight:700;padding-top:9px;margin-top:9px}.foot{border-top:1px solid #d7dbe0;text-align:center;color:#7b8490;font-size:8px;margin-top:14px;padding-top:7px}.no-print{margin-top:12px;text-align:center}.no-print button{border:1px solid #9d2933;background:#9d2933;color:#fff;border-radius:3px;padding:7px 13px}@media print{.no-print{display:none}}
+    </style></head><body><header><img src="${location.origin}/dk-logo.webp"><div class="office"><h1>${esc(config?.nome_oficina || "DK Auto Center")}</h1><div><strong>CNPJ:</strong> ${display(config?.cnpj)}</div><div><strong>Endereço:</strong> ${display(config?.endereco)}</div><div><strong>Telefone / WhatsApp:</strong> ${display(config?.telefone)}</div></div></header><div class="band">ORÇAMENTO Nº ${numero}<span>Data de Emissão: ${now.toLocaleDateString("pt-BR")}<br>Validade: 15 dias</span></div><div class="boxes"><div class="box"><strong>Dados do cliente</strong><p><b>Razão Social/Nome:</b> ${display(pdfDraft.cliente_nome)}</p><p><b>CPF/CNPJ:</b> ${display(pdfDraft.cliente_cpf)}</p><p><b>Endereço:</b> ${display(pdfDraft.cliente_endereco)}</p><p><b>Bairro/Cidade:</b> ${display(pdfDraft.cliente_bairro_cidade)}</p><p><b>E-mail:</b> ${display(pdfDraft.cliente_email)}</p><p><b>Telefone:</b> ${display(pdfDraft.cliente_telefone)}</p></div><div class="box"><strong>Dados do veículo</strong><p><b>Modelo:</b> ${display([pdfDraft.fabricante, pdfDraft.modelo].filter(Boolean).join(" "))}</p><p><b>Espécie / Tipo:</b> ${display(pdfDraft.veiculo_especie_tipo)}</p><p><b>Placa Atual:</b> ${display(pdfDraft.placa)}</p><p><b>Placa Anterior:</b> ${display(pdfDraft.placa_anterior)}</p><p><b>Ano Fab. / Modelo:</b> ${display(pdfDraft.ano_fabricacao_modelo)}</p><p><b>Cilindrada:</b> ${display(pdfDraft.cilindrada)}</p><p><b>Cor:</b> ${display(pdfDraft.cor)}</p><p><b>Chassi:</b> ${display(pdfDraft.chassi)}</p></div></div>${section("peca", "Produtos / peças", "Nenhuma peça adicionada.")}${section("mao_de_obra", "Mão de obra / serviços", "Nenhum serviço adicionado.")}<div class="bottom"><div class="conditions"><strong class="section-title">Observações e condições</strong><p>${esc(pdfDraft.observacao || "Orçamento válido por 15 dias a partir da data de emissão.")}</p><p><b>Emissão de NF-e:</b> As notas fiscais são emitidas mediante a confirmação do pagamento.</p><p><b>${descontoLabel}:</b> ${descontoText}</p><div class="pix-note"><b>${pdfDraft.pagamento_pix ? "Desconto especial Pix (25%)" : "Condição de desconto"}:</b> ${descontoText}</div></div><div class="summary"><strong class="section-title">Resumo financeiro</strong><div><span>Valor bruto:</span><span>${brl(totais.bruto)}</span></div><div><span>Peças:</span><span>${brl(totais.pecasTotal)}</span></div><div><span>Mão de obra:</span><span>${brl(totais.maoDeObraTotal)}</span></div><div class="discount"><span>${descontoLabel}:</span><span>- ${brl(totais.desconto)}</span></div><div><span>Peças após desconto:</span><span>${brl(Math.max(totais.pecasTotal - totais.desconto, 0))}</span></div><div class="total"><span>Subtotal:</span><span>${brl(totais.total)}</span></div></div></div><div class="foot">DK Auto Center · ${display(config?.endereco)} · Tel: ${display(config?.telefone)}</div><p class="no-print"><button onclick="window.print()">Imprimir / salvar como PDF</button></p></body></html>`;
     const win = window.open("", "_blank", "width=900,height=900");
     if (!win) {
       toast.error("Permita janelas pop-up para gerar o PDF.");
@@ -489,7 +533,7 @@ function Orcamentos() {
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <Label>Cliente</Label>
+                    <Label>Razão Social/Nome</Label>
                     <Input
                       value={draft.cliente_nome ?? ""}
                       onChange={(e) => setDraft({ ...draft, cliente_nome: e.target.value })}
@@ -518,11 +562,48 @@ function Orcamentos() {
                     />
                   </div>
                   <div>
-                    <Label>Placa</Label>
+                    <Label>E-mail</Label>
+                    <Input
+                      type="email"
+                      value={draft.cliente_email ?? ""}
+                      onChange={(e) => setDraft({ ...draft, cliente_email: e.target.value })}
+                      placeholder="cliente@exemplo.com"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <Label>Endereço</Label>
+                    <Input
+                      value={draft.cliente_endereco ?? ""}
+                      onChange={(e) => setDraft({ ...draft, cliente_endereco: e.target.value })}
+                      placeholder="Rua, número e complemento"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <Label>Bairro/Cidade</Label>
+                    <Input
+                      value={draft.cliente_bairro_cidade ?? ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, cliente_bairro_cidade: e.target.value })
+                      }
+                      placeholder="Bairro, cidade e UF"
+                    />
+                  </div>
+                  <div>
+                    <Label>Placa Atual</Label>
                     <Input
                       value={draft.placa ?? ""}
-                      onChange={(e) => setDraft({ ...draft, placa: e.target.value })}
+                      onChange={(e) => setDraft({ ...draft, placa: e.target.value.toUpperCase() })}
                       placeholder="ABC1D23"
+                    />
+                  </div>
+                  <div>
+                    <Label>Placa Anterior</Label>
+                    <Input
+                      value={draft.placa_anterior ?? ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, placa_anterior: e.target.value.toUpperCase() })
+                      }
+                      placeholder="Opcional"
                     />
                   </div>
                   <div>
@@ -542,10 +623,44 @@ function Orcamentos() {
                     />
                   </div>
                   <div>
+                    <Label>Espécie / Tipo</Label>
+                    <Input
+                      value={draft.veiculo_especie_tipo ?? ""}
+                      onChange={(e) => setDraft({ ...draft, veiculo_especie_tipo: e.target.value })}
+                      placeholder="Automóvel"
+                    />
+                  </div>
+                  <div>
+                    <Label>Ano Fab. / Modelo</Label>
+                    <Input
+                      value={draft.ano_fabricacao_modelo ?? ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, ano_fabricacao_modelo: e.target.value })
+                      }
+                      placeholder="2022 / 2023"
+                    />
+                  </div>
+                  <div>
+                    <Label>Cilindrada</Label>
+                    <Input
+                      value={draft.cilindrada ?? ""}
+                      onChange={(e) => setDraft({ ...draft, cilindrada: e.target.value })}
+                      placeholder="1.0"
+                    />
+                  </div>
+                  <div>
                     <Label>Cor</Label>
                     <Input
                       value={draft.cor ?? ""}
                       onChange={(e) => setDraft({ ...draft, cor: e.target.value })}
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <Label>Chassi</Label>
+                    <Input
+                      value={draft.chassi ?? ""}
+                      onChange={(e) => setDraft({ ...draft, chassi: e.target.value.toUpperCase() })}
+                      placeholder="Opcional"
                     />
                   </div>
                   <div className="rounded-md border border-primary/30 bg-primary/5 p-3 lg:col-span-2">
