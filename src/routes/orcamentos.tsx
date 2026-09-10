@@ -41,6 +41,7 @@ type Peca = {
   nome: string;
   sku: string | null;
   marca: string | null;
+  tipo: string;
   preco_venda: number;
   estoque: number;
   deleted_at: string | null;
@@ -64,6 +65,7 @@ type Item = {
   valor_unitario: number;
   valor_total: number;
   ordem: number;
+  peca_tipo?: string | null;
 };
 type Orcamento = {
   id: string;
@@ -150,6 +152,13 @@ function valorItens(itens: Item[], tipo: TipoItem) {
     .reduce((total, item) => total + Number(item.valor_total || 0), 0);
 }
 
+function itemEhPneu(item: Item, pecasPorId: ReadonlyMap<string, Peca>) {
+  return (
+    item.tipo === "peca" &&
+    (item.peca_tipo === "pneu" || pecasPorId.get(item.peca_id ?? "")?.tipo === "pneu")
+  );
+}
+
 function Orcamentos() {
   const { role, user } = useAuth();
   const gerente = role === "gerente";
@@ -181,7 +190,7 @@ function Orcamentos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("pecas")
-        .select("id,nome,sku,marca,preco_venda,estoque,deleted_at")
+        .select("id,nome,sku,marca,tipo,preco_venda,estoque,deleted_at")
         .is("deleted_at", null)
         .order("nome");
       if (error) throw error;
@@ -238,19 +247,25 @@ function Orcamentos() {
     () => catalogo.filter((s) => matches(servicoBusca, [s.nome])),
     [catalogo, servicoBusca],
   );
-
+  const pecasPorId = useMemo(() => new Map(pecas.map((peca) => [peca.id, peca])), [pecas]);
   const totais = useMemo(() => {
-    const pecasTotal = valorItens(draft.itens, "peca");
+    const pecasTotal = draft.itens
+      .filter((item) => item.tipo === "peca" && !itemEhPneu(item, pecasPorId))
+      .reduce((total, item) => total + Number(item.valor_total || 0), 0);
+    const pneusTotal = draft.itens
+      .filter((item) => itemEhPneu(item, pecasPorId))
+      .reduce((total, item) => total + Number(item.valor_total || 0), 0);
     const maoDeObraTotal = valorItens(draft.itens, "mao_de_obra");
     const desconto = draft.pagamento_pix ? pecasTotal * 0.25 : 0;
     return {
       pecasTotal,
+      pneusTotal,
       maoDeObraTotal,
-      bruto: pecasTotal + maoDeObraTotal,
+      bruto: pecasTotal + pneusTotal + maoDeObraTotal,
       desconto,
-      total: Math.max(pecasTotal + maoDeObraTotal - desconto, 0),
+      total: Math.max(pecasTotal + pneusTotal + maoDeObraTotal - desconto, 0),
     };
-  }, [draft.itens, draft.pagamento_pix]);
+  }, [draft.itens, draft.pagamento_pix, pecasPorId]);
 
   const salvar = useMutation({
     mutationFn: async () => {
@@ -407,8 +422,8 @@ function Orcamentos() {
     };
     const descontoLabel = pdfDraft.pagamento_pix ? "Desconto especial Pix (25%)" : "Desconto Pix";
     const descontoText = pdfDraft.pagamento_pix
-      ? `Aplicado exclusivamente sobre o valor original das peças (${brl(totais.pecasTotal)}), reduzindo o subtotal das peças para ${brl(Math.max(totais.pecasTotal - totais.desconto, 0))}. A mão de obra (${brl(totais.maoDeObraTotal)}) não participa da base de cálculo.`
-      : "Não aplicado neste orçamento. Quando selecionado, incide exclusivamente sobre peças.";
+      ? `Aplicado exclusivamente sobre o valor original das peças comuns (${brl(totais.pecasTotal)}), reduzindo esse subtotal para ${brl(Math.max(totais.pecasTotal - totais.desconto, 0))}. Pneus (${brl(totais.pneusTotal)}) e mão de obra (${brl(totais.maoDeObraTotal)}) não participam da base de cálculo.`
+      : "Não aplicado neste orçamento. Quando selecionado, incide exclusivamente sobre peças comuns; pneus e mão de obra ficam fora.";
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Orçamento #${numero}</title><style>
       @page{size:A4;margin:11mm}*{box-sizing:border-box}body{font-family:Arial,"Helvetica Neue",sans-serif;color:#26313d;font-size:10px;line-height:1.35;margin:0;background:#fff}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #a62f38;padding:2px 0 10px;margin-bottom:12px}header img{width:72px;height:auto}header .office{text-align:right;line-height:1.45;color:#374151}header h1{font-size:17px;letter-spacing:.5px;color:#9d2933;margin:0 0 2px;text-transform:uppercase}header strong{color:#26313d}.band{background:#1d1d1d;color:#fff;border-radius:3px;padding:10px 14px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;font-size:16px;font-weight:700;letter-spacing:.4px}.band span{font-size:10px;font-weight:400;line-height:1.55;text-align:right;letter-spacing:0}.boxes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}.box{border:1px solid #d7dbe0;border-radius:2px;padding:10px 12px;min-height:136px}.box strong,.section-title{display:block;color:#9d2933;font-weight:700;letter-spacing:.5px;text-transform:uppercase}.box strong{font-size:11px;border-bottom:1px solid #dfe3e7;padding-bottom:6px;margin-bottom:7px}.box p{margin:3px 0;font-size:10px}.section-title{font-size:11px;margin:11px 0 0;padding:6px 9px;border:1px solid #d7dbe0;border-bottom:0;background:#fff}table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 7px}th,td{border:1px solid #d7dbe0;padding:6px 7px;vertical-align:middle}th{background:#25364d;color:#fff;font-size:8.5px;text-align:left;letter-spacing:.25px}td{font-size:10px}tbody tr:nth-child(even){background:#f7f9fb}.item-no{width:45px;text-align:center}.center{width:52px;text-align:center}.money{width:92px;text-align:right;white-space:nowrap}.description{overflow-wrap:anywhere}.empty{text-align:center;color:#687482;padding:10px}.bottom{display:grid;grid-template-columns:1.22fr .78fr;gap:12px;margin-top:11px}.conditions,.summary{border:1px solid #d7dbe0;border-radius:2px;padding:10px 12px}.conditions .section-title,.summary .section-title{border:0;background:transparent;margin:0 0 7px;padding:0}.conditions p{margin:6px 0;font-size:10px}.pix-note{background:#e8f6ef;border-left:4px solid #42a879;border-radius:3px;padding:8px 9px;color:#30634b;margin-top:8px}.summary div{display:flex;justify-content:space-between;gap:10px;margin:7px 0;font-size:10px}.summary .discount{color:#a62f38}.summary .total{border-top:2px solid #a62f38;color:#9d2933;font-size:17px;font-weight:700;padding-top:9px;margin-top:9px}.foot{border-top:1px solid #d7dbe0;text-align:center;color:#7b8490;font-size:8px;margin-top:14px;padding-top:7px}.no-print{margin-top:12px;text-align:center}.no-print button{border:1px solid #9d2933;background:#9d2933;color:#fff;border-radius:3px;padding:7px 13px}@media print{.no-print{display:none}}
     </style></head><body><header><img src="${location.origin}/dk-logo.webp"><div class="office"><h1>${esc(config?.nome_oficina || "DK Auto Center")}</h1><div><strong>CNPJ:</strong> ${display(config?.cnpj)}</div><div><strong>Endereço:</strong> ${display(config?.endereco)}</div><div><strong>Telefone / WhatsApp:</strong> ${display(config?.telefone)}</div></div></header><div class="band">ORÇAMENTO Nº ${numero}<span>Data de Emissão: ${now.toLocaleDateString("pt-BR")}<br>Validade: 15 dias</span></div><div class="boxes"><div class="box"><strong>Dados do cliente</strong><p><b>Razão Social/Nome:</b> ${display(pdfDraft.cliente_nome)}</p><p><b>CPF/CNPJ:</b> ${display(pdfDraft.cliente_cpf)}</p><p><b>Endereço:</b> ${display(pdfDraft.cliente_endereco)}</p><p><b>Bairro/Cidade:</b> ${display(pdfDraft.cliente_bairro_cidade)}</p><p><b>E-mail:</b> ${display(pdfDraft.cliente_email)}</p><p><b>Telefone:</b> ${display(pdfDraft.cliente_telefone)}</p></div><div class="box"><strong>Dados do veículo</strong><p><b>Modelo:</b> ${display([pdfDraft.fabricante, pdfDraft.modelo].filter(Boolean).join(" "))}</p><p><b>Espécie / Tipo:</b> ${display(pdfDraft.veiculo_especie_tipo)}</p><p><b>Placa Atual:</b> ${display(pdfDraft.placa)}</p><p><b>Placa Anterior:</b> ${display(pdfDraft.placa_anterior)}</p><p><b>Ano Fab. / Modelo:</b> ${display(pdfDraft.ano_fabricacao_modelo)}</p><p><b>Cilindrada:</b> ${display(pdfDraft.cilindrada)}</p><p><b>Cor:</b> ${display(pdfDraft.cor)}</p><p><b>Chassi:</b> ${display(pdfDraft.chassi)}</p></div></div>${section("peca", "Produtos / peças", "Nenhuma peça adicionada.")}${section("mao_de_obra", "Mão de obra / serviços", "Nenhum serviço adicionado.")}<div class="bottom"><div class="conditions"><strong class="section-title">Observações e condições</strong><p>${esc(pdfDraft.observacao || "Orçamento válido por 15 dias a partir da data de emissão.")}</p><p><b>Emissão de NF-e:</b> As notas fiscais são emitidas mediante a confirmação do pagamento.</p><p><b>${descontoLabel}:</b> ${descontoText}</p><div class="pix-note"><b>${pdfDraft.pagamento_pix ? "Desconto especial Pix (25%)" : "Condição de desconto"}:</b> ${descontoText}</div></div><div class="summary"><strong class="section-title">Resumo financeiro</strong><div><span>Valor bruto:</span><span>${brl(totais.bruto)}</span></div><div><span>Peças:</span><span>${brl(totais.pecasTotal)}</span></div><div><span>Mão de obra:</span><span>${brl(totais.maoDeObraTotal)}</span></div><div class="discount"><span>${descontoLabel}:</span><span>- ${brl(totais.desconto)}</span></div><div><span>Peças após desconto:</span><span>${brl(Math.max(totais.pecasTotal - totais.desconto, 0))}</span></div><div class="total"><span>Subtotal:</span><span>${brl(totais.total)}</span></div></div></div><div class="foot">DK Auto Center · ${display(config?.endereco)} · Tel: ${display(config?.telefone)}</div><p class="no-print"><button onclick="window.print()">Imprimir / salvar como PDF</button></p></body></html>`;
@@ -674,8 +689,8 @@ function Orcamentos() {
                       <span>
                         <strong className="block text-sm">Pagamento via Pix</strong>
                         <span className="text-xs text-muted-foreground">
-                          Desconto de 25% aplicado somente sobre peças. A mão de obra não recebe
-                          desconto.
+                          Desconto de 25% aplicado somente sobre peças comuns. Pneus e mão de obra
+                          não recebem desconto.
                         </span>
                       </span>
                     </label>
@@ -702,6 +717,7 @@ function Orcamentos() {
                           onClick={() => {
                             adicionarItem("peca", {
                               peca_id: peca.id,
+                              peca_tipo: peca.tipo,
                               descricao: [peca.nome, peca.marca].filter(Boolean).join(" · "),
                               valor_unitario: Number(peca.preco_venda),
                             });
@@ -792,7 +808,11 @@ function Orcamentos() {
                     >
                       <div>
                         <Badge variant="outline" className="mb-1">
-                          {item.tipo === "peca" ? "Peça" : "Mão de obra"}
+                          {item.tipo === "mao_de_obra"
+                            ? "Mão de obra"
+                            : itemEhPneu(item, pecasPorId)
+                              ? "Pneu (sem desconto)"
+                              : "Peça"}
                         </Badge>
                         <Input
                           value={item.descricao}
@@ -851,8 +871,12 @@ function Orcamentos() {
                   </div>
                   <div className="rounded-md border bg-muted/20 p-4 text-sm">
                     <div className="flex justify-between">
-                      <span>Produtos / peças</span>
+                      <span>Peças (com desconto)</span>
                       <strong>{brl(totais.pecasTotal)}</strong>
+                    </div>
+                    <div className="mt-2 flex justify-between">
+                      <span>Pneus (sem desconto)</span>
+                      <strong>{brl(totais.pneusTotal)}</strong>
                     </div>
                     <div className="mt-2 flex justify-between">
                       <span>Mão de obra</span>
@@ -864,7 +888,8 @@ function Orcamentos() {
                     </div>
                     {draft.pagamento_pix && (
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Desconto exclusivo para pagamento via Pix e aplicado somente nas peças.
+                        Desconto exclusivo para pagamento via Pix e aplicado somente nas peças
+                        comuns. Pneus e mão de obra não entram no desconto.
                       </p>
                     )}
                     <div className="mt-3 flex justify-between border-t pt-3 text-lg font-bold text-primary">

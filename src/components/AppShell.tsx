@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertas } from "@/hooks/useAlertas";
@@ -25,6 +25,7 @@ const NAV_ITEMS: Record<NavKey, { to: string; icon: string; label: string }> = {
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, loading, nome, role, signOut } = useAuth();
   const navigate = useNavigate();
+  const [menuMobileAberto, setMenuMobileAberto] = useState(false);
   const pathname = useRouterState({
     select: (s: { location: { pathname: string } }) => s.location.pathname,
   });
@@ -33,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     queryKey: ["notificacoes-nao-lidas", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { count, error } = await (supabase as any)
+      const { count, error } = await supabase
         .from("notificacoes_internas")
         .select("id", { count: "exact", head: true })
         .eq("destinatario_user_id", user!.id)
@@ -55,6 +56,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       void navigate({ to: homeRouteFor(role) });
     }
   }, [loading, user, role, pathname, navigate]);
+
+  useEffect(() => {
+    setMenuMobileAberto(false);
+  }, [pathname]);
 
   if (loading || !user || !role) {
     return (
@@ -125,31 +130,47 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 border-b bg-card px-4 py-3 md:hidden">
+        <header className="relative flex items-center justify-between gap-3 border-b bg-card px-4 py-3 md:hidden">
           <span className="font-display text-lg font-bold uppercase">DK Auto Center</span>
-          <Button size="sm" variant="ghost" onClick={() => void signOut()}>
-            <i className="fa-solid fa-right-from-bracket" />
-          </Button>
-        </header>
-        <nav className="flex gap-1 overflow-x-auto border-b bg-card px-2 py-2 md:hidden">
-          {NAV.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              preload="render"
-              className="flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-xs text-muted-foreground [&.active]:bg-primary [&.active]:text-primary-foreground"
-              activeOptions={{ exact: item.to === "/" }}
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={menuMobileAberto ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={menuMobileAberto}
+              onClick={() => setMenuMobileAberto((aberto) => !aberto)}
             >
-              <i className={`fa-solid ${item.icon}`} />
-              {item.label}
-              {item.to === "/notificacoes-internas" && mensagensNaoLidas > 0 && (
-                <span className="min-w-4 rounded-full bg-destructive px-1 text-center text-[9px] font-bold text-destructive-foreground">
-                  {mensagensNaoLidas > 99 ? "99+" : mensagensNaoLidas}
-                </span>
-              )}
-            </Link>
-          ))}
-        </nav>
+              <i className={`fa-solid ${menuMobileAberto ? "fa-xmark" : "fa-bars"}`} />
+            </Button>
+            <Button size="sm" variant="ghost" aria-label="Sair" onClick={() => void signOut()}>
+              <i className="fa-solid fa-right-from-bracket" />
+            </Button>
+          </div>
+          {menuMobileAberto && (
+            <nav className="absolute left-0 right-0 top-full z-50 border-b bg-card p-3 shadow-lg">
+              <div className="grid gap-1">
+                {NAV.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    preload="render"
+                    onClick={() => setMenuMobileAberto(false)}
+                    activeOptions={{ exact: item.to === "/" }}
+                    className="flex items-center gap-3 rounded-md px-3 py-3 text-sm text-muted-foreground [&.active]:bg-primary [&.active]:text-primary-foreground"
+                  >
+                    <i className={`fa-solid ${item.icon} w-4 text-center`} />
+                    {item.label}
+                    {item.to === "/notificacoes-internas" && mensagensNaoLidas > 0 && (
+                      <span className="ml-auto min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center text-[10px] font-bold text-destructive-foreground">
+                        {mensagensNaoLidas > 99 ? "99+" : mensagensNaoLidas}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </nav>
+          )}
+        </header>
         <main className="flex-1 p-4 md:p-8">{children}</main>
       </div>
     </div>
