@@ -884,6 +884,7 @@ export type Database = {
       }
       pecas: {
         Row: {
+          aceita_desconto_pix: boolean
           categoria: string
           construcao: string | null
           created_at: string
@@ -905,6 +906,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          aceita_desconto_pix?: boolean
           categoria?: string
           construcao?: string | null
           created_at?: string
@@ -926,6 +928,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          aceita_desconto_pix?: boolean
           categoria?: string
           construcao?: string | null
           created_at?: string

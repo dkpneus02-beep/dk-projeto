@@ -41,6 +41,7 @@ const vazio = {
   nome: "",
   marca: "",
   tipo: "peca",
+  aceita_desconto_pix: true,
   estoque: 0,
   estoque_minimo: 0,
   preco_custo: 0,
@@ -137,6 +138,7 @@ function Pecas() {
         nome: p.nome,
         marca: p.marca || null,
         tipo: p.tipo,
+        aceita_desconto_pix: p.aceita_desconto_pix,
         categoria: p.tipo,
         estoque: p.estoque,
         estoque_minimo: p.estoque_minimo,
@@ -204,6 +206,7 @@ function Pecas() {
             nome: p.nome,
             marca: p.marca ?? "",
             tipo: p.tipo,
+            aceita_desconto_pix: p.aceita_desconto_pix,
             estoque: Number(p.estoque),
             estoque_minimo: Number(p.estoque_minimo),
             preco_custo: Number(p.preco_custo),
@@ -429,12 +432,38 @@ function Pecas() {
               </Button>
             </div>
 
-            <Tabs value={edit.tipo} onValueChange={(v) => setEdit({ ...edit, tipo: v })}>
+            <Tabs
+              value={edit.tipo}
+              onValueChange={(v) =>
+                setEdit({
+                  ...edit,
+                  tipo: v,
+                  aceita_desconto_pix: v === "pneu" ? false : edit.aceita_desconto_pix,
+                })
+              }
+            >
               <TabsList>
                 <TabsTrigger value="peca">Peça</TabsTrigger>
                 <TabsTrigger value="pneu">Pneu</TabsTrigger>
               </TabsList>
             </Tabs>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={edit.aceita_desconto_pix}
+                onChange={(event) =>
+                  setEdit({ ...edit, aceita_desconto_pix: event.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 accent-primary"
+              />
+              <span>
+                <strong className="block">Aceita desconto Pix de 25%</strong>
+                <span className="text-xs text-muted-foreground">
+                  Desmarque para óleo, pneus ou itens comprados fora do fornecedor.
+                </span>
+              </span>
+            </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Campo
