@@ -61,6 +61,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     setMenuMobileAberto(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!menuMobileAberto) return;
+    const overflowOriginal = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflowOriginal;
+    };
+  }, [menuMobileAberto]);
+
   if (loading || !user || !role) {
     return (
       <div className="flex min-h-screen items-center justify-center text-muted-foreground">
@@ -130,45 +139,81 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative flex items-center justify-between gap-3 border-b bg-card px-4 py-3 md:hidden">
+        <header className="relative flex items-center gap-3 border-b bg-card px-4 py-3 md:hidden">
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={menuMobileAberto ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={menuMobileAberto}
+            onClick={() => setMenuMobileAberto((aberto) => !aberto)}
+            className="text-primary hover:bg-primary/10 hover:text-primary"
+          >
+            <i className={`fa-solid ${menuMobileAberto ? "fa-xmark" : "fa-bars"}`} />
+          </Button>
           <span className="font-display text-lg font-bold uppercase">DK Auto Center</span>
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={menuMobileAberto ? "Fechar menu" : "Abrir menu"}
-              aria-expanded={menuMobileAberto}
-              onClick={() => setMenuMobileAberto((aberto) => !aberto)}
-            >
-              <i className={`fa-solid ${menuMobileAberto ? "fa-xmark" : "fa-bars"}`} />
-            </Button>
+          <div className="ml-auto flex items-center gap-1">
             <Button size="sm" variant="ghost" aria-label="Sair" onClick={() => void signOut()}>
               <i className="fa-solid fa-right-from-bracket" />
             </Button>
           </div>
           {menuMobileAberto && (
-            <nav className="absolute left-0 right-0 top-full z-50 border-b bg-card p-3 shadow-lg">
-              <div className="grid gap-1">
-                {NAV.map((item) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    preload="render"
+            <div className="fixed inset-0 z-50 md:hidden" role="presentation">
+              <button
+                type="button"
+                aria-label="Fechar menu"
+                className="absolute inset-0 bg-black/50"
+                onClick={() => setMenuMobileAberto(false)}
+              />
+              <nav className="absolute inset-y-0 left-0 flex w-[min(82vw,20rem)] flex-col overflow-y-auto bg-sidebar p-4 text-sidebar-foreground shadow-2xl">
+                <div className="mb-5 flex items-center justify-between border-b border-sidebar-border pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded bg-primary text-primary-foreground">
+                      <i className="fa-solid fa-gears" />
+                    </span>
+                    <span className="font-display text-lg font-bold uppercase">DK Auto Center</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Fechar menu"
                     onClick={() => setMenuMobileAberto(false)}
-                    activeOptions={{ exact: item.to === "/" }}
-                    className="flex items-center gap-3 rounded-md px-3 py-3 text-sm text-muted-foreground [&.active]:bg-primary [&.active]:text-primary-foreground"
+                    className="text-sidebar-foreground hover:bg-sidebar-accent"
                   >
-                    <i className={`fa-solid ${item.icon} w-4 text-center`} />
-                    {item.label}
-                    {item.to === "/notificacoes-internas" && mensagensNaoLidas > 0 && (
-                      <span className="ml-auto min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center text-[10px] font-bold text-destructive-foreground">
-                        {mensagensNaoLidas > 99 ? "99+" : mensagensNaoLidas}
-                      </span>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            </nav>
+                    <i className="fa-solid fa-xmark" />
+                  </Button>
+                </div>
+                <div className="grid gap-1">
+                  {NAV.map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      preload="render"
+                      onClick={() => setMenuMobileAberto(false)}
+                      activeOptions={{ exact: item.to === "/" }}
+                      className="flex items-center gap-3 rounded-md px-3 py-3 text-sm text-muted-foreground [&.active]:bg-primary [&.active]:text-primary-foreground"
+                    >
+                      <i className={`fa-solid ${item.icon} w-4 text-center`} />
+                      {item.label}
+                      {item.to === "/notificacoes-internas" && mensagensNaoLidas > 0 && (
+                        <span className="ml-auto min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center text-[10px] font-bold text-destructive-foreground">
+                          {mensagensNaoLidas > 99 ? "99+" : mensagensNaoLidas}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+                <div className="mt-auto border-t border-sidebar-border pt-4 text-sm">
+                  <p className="font-medium">{nome}</p>
+                  <p className="mb-3 text-xs text-sidebar-foreground/60 capitalize">{role}</p>
+                  <button
+                    onClick={() => void signOut()}
+                    className="flex items-center gap-2 text-xs text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                  >
+                    <i className="fa-solid fa-right-from-bracket" /> Sair
+                  </button>
+                </div>
+              </nav>
+            </div>
           )}
         </header>
         <main className="flex-1 p-4 md:p-8">{children}</main>

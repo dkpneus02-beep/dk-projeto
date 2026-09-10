@@ -4,8 +4,8 @@
   "description": "Sistema de gestão da DK Auto Center",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#111111",
-  "theme_color": "#111111",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     { "src": "/dk-favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/dk-favicon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }

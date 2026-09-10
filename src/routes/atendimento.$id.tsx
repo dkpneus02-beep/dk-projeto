@@ -125,7 +125,7 @@ function AtendimentoPage() {
       if (error) throw error;
       return data ?? [];
     },
-    enabled: gerente,
+    enabled: !!role,
   });
 
   const { data: config } = useQuery({
@@ -181,6 +181,7 @@ function AtendimentoPage() {
         garantia_km: payload.garantia_km,
         peca_id: payload.peca_id ?? null,
         quantidade: payload.quantidade ?? 1,
+        mecanico_id: gerente ? null : mecanicoId,
       });
       if (error) throw error;
     },
@@ -442,7 +443,8 @@ function AtendimentoPage() {
                       )}
                     </div>
                   </div>
-                  {!finalizado && gerente && (
+                  {!finalizado &&
+                    (gerente || canEditServico(role, s.mecanico_id, mecanicoId)) && (
                     <div className="mt-3 grid gap-2 rounded-md bg-muted/20 p-3 sm:grid-cols-3">
                       <div className="space-y-1.5">
                         <Label>Status do serviço</Label>
@@ -465,14 +467,15 @@ function AtendimentoPage() {
                       <div className="space-y-1.5">
                         <Label>Responsável pelo serviço</Label>
                         <Select
-                        value={s.mecanico_id ?? "none"}
-                        onValueChange={(v) =>
-                          updServico.mutate({
-                            sid: s.id,
-                            patch: { mecanico_id: v === "none" ? null : v },
-                          })
-                        }
-                      >
+                          value={s.mecanico_id ?? "none"}
+                          disabled={!gerente}
+                          onValueChange={(v) =>
+                            updServico.mutate({
+                              sid: s.id,
+                              patch: { mecanico_id: v === "none" ? null : v },
+                            })
+                          }
+                        >
                         <SelectTrigger>
                           <SelectValue placeholder="Mecânico" />
                         </SelectTrigger>
@@ -610,11 +613,11 @@ function AtendimentoPage() {
                       </div>
                     </div>
                   )}
-                  {!finalizado && !gerente && (
+                  {!finalizado &&
+                    !gerente &&
+                    !canEditServico(role, s.mecanico_id, mecanicoId) && (
                     <div className="mt-3 space-y-2 rounded-md border border-primary/10 bg-muted/20 p-3">
-                      {/* Mecânico não vê nem altera responsável/valor — só o status do
-                          próprio serviço. Campos abaixo são somente leitura (a trava
-                          real está no banco: RLS + trigger bloqueiam a escrita). */}
+                      {/* Serviço de outro mecânico: somente status quando a regra permitir. */}
                       <Select
                         value={s.status}
                         disabled={!canEditServico(role, s.mecanico_id, mecanicoId)}

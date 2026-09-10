@@ -26,6 +26,9 @@ const browserAsyncHooksPlugin: Plugin = {
 export default defineConfig({
   plugins: [browserAsyncHooksPlugin],
   vite: {
+    server: {
+      allowedHosts: true,
+    },
     optimizeDeps: {
       exclude: [
         "@tanstack/react-start-client",
