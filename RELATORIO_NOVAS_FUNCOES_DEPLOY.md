@@ -94,15 +94,19 @@ As alterações estão consolidadas localmente na branch `feat/catalogo-pecas-re
 
 O build final foi aprovado. O diretório de trabalho ficou limpo após a consolidação dos arquivos. As migrações foram versionadas e as etapas financeiras necessárias foram aplicadas no projeto Supabase conectado.
 
-## 10. O que ainda não está incluído
+## 10. Custo direto de mão de obra
 
-A versão ainda não possui custo direto de mão de obra distribuído por OS. O resultado após CMV desconta o custo histórico de peças, mas não calcula custo de mecânico, folha ou hora técnica por serviço.
+Foi implementado o custo direto e histórico de mão de obra. O gerente configura um percentual entre 0% e 100% no Financeiro. Na finalização da OS, o sistema congela a base, o percentual, o mecânico e o custo calculado. Na reabertura, cria o estorno correspondente.
+
+O DRE agora exibe `Custo de mão de obra` e `Resultado após custos diretos`. A configuração inicial é 0,00% para evitar qualquer alteração automática em OS existentes antes da definição do percentual real da oficina.
+
+## 11. O que ainda não está incluído
 
 Também não foi implementado o controle de estoque por lotes com custo médio ponderado ou PEPS/FIFO. O sistema já preserva o custo histórico de cada consumo, que é suficiente para a etapa atual.
 
 Esses itens são evoluções futuras, não bloqueios técnicos para o deploy desta versão.
 
-## 11. Próximo passo
+## 12. Próximo passo
 
 O próximo passo é a autorização explícita para publicar esta branch no Netlify. Até essa autorização, nenhum comando de deploy será executado.
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AppShell, PageHeader } from "@/components/AppShell";
@@ -58,6 +58,7 @@ function Financeiro() {
   const [form, setForm] = useState<FormState>(formInicial);
   const [formasPagamento, setFormasPagamento] = useState<Record<string, string>>({});
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [percentualMaoObra, setPercentualMaoObra] = useState("0");
 
   const { data: categorias = [], isLoading: carregandoCategorias } = useQuery({
     queryKey: ["financeiro-categorias"],
@@ -129,6 +130,52 @@ function Financeiro() {
       if (error) throw error;
       return data ?? [];
     },
+  });
+
+  const { data: parametrosMaoObra } = useQuery({
+    queryKey: ["financeiro-parametros-mao-obra"],
+    enabled: gerente,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("financeiro_parametros").select("*").eq("id", true).single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: custosMaoObra = [] } = useQuery({
+    queryKey: ["financeiro-custos-mao-obra", mes],
+    enabled: gerente,
+    queryFn: async () => {
+      const inicio = `${mes}-01T00:00:00`;
+      const fim = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 1).toISOString();
+      const { data, error } = await supabase
+        .from("atendimento_mao_obra_custos")
+        .select("tipo, custo_total, criado_em, atendimento_id")
+        .gte("criado_em", inicio)
+        .lt("criado_em", fim);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  useEffect(() => {
+    if (parametrosMaoObra) setPercentualMaoObra(String(parametrosMaoObra.custo_mao_obra_percentual));
+  }, [parametrosMaoObra]);
+
+  const salvarPercentualMaoObra = useMutation({
+    mutationFn: async () => {
+      const percentual = Math.round(Number(percentualMaoObra.replace(",", ".")) * 100) / 100;
+      if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+        throw new Error("Informe um percentual entre 0 e 100.");
+      }
+      const { error } = await supabase.rpc("salvar_percentual_custo_mao_obra", { _percentual: percentual });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Custo de mão de obra atualizado para as próximas OS.");
+      void qc.invalidateQueries({ queryKey: ["financeiro-parametros-mao-obra"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const salvar = useMutation({
@@ -266,6 +313,11 @@ function Financeiro() {
     0,
   );
   const resultadoAposCmv = resultadoOperacional - cmv;
+  const custoMaoObra = custosMaoObra.reduce(
+    (s, movimento) => s + (movimento.tipo === "consumo" ? 1 : -1) * Number(movimento.custo_total || 0),
+    0,
+  );
+  const resultadoAposCustosDiretos = resultadoAposCmv - custoMaoObra;
   const pendentes = gastos.filter((g) => g.status === "pendente" || g.status === "atrasado").reduce((s, g) => s + Number(g.valor_total || 0), 0);
   const hojeIso = new Date().toISOString().slice(0, 10);
   const limiteAviso = new Date();
@@ -280,8 +332,9 @@ function Financeiro() {
     ["Gastos variáveis", gastosVariaveis, "text-destructive"],
     ["Resultado operacional", resultadoOperacional, resultadoOperacional >= 0 ? "text-success" : "text-destructive"],
     ["CMV de peças", cmv, "text-warning"],
-    ["Resultado após CMV", resultadoAposCmv, resultadoAposCmv >= 0 ? "text-success" : "text-destructive"],
-  ] as const, [receitaLiquida, gastosFixos, gastosVariaveis, resultadoOperacional, cmv, resultadoAposCmv]);
+    ["Custo de mão de obra", custoMaoObra, "text-warning"],
+    ["Resultado após custos diretos", resultadoAposCustosDiretos, resultadoAposCustosDiretos >= 0 ? "text-success" : "text-destructive"],
+  ] as const, [receitaLiquida, gastosFixos, gastosVariaveis, resultadoOperacional, cmv, custoMaoObra, resultadoAposCustosDiretos]);
 
   if (!gerente) return <AppShell><PageHeader title="Financeiro" subtitle="Acesso exclusivo para o gerente" /></AppShell>;
 
@@ -290,6 +343,24 @@ function Financeiro() {
       <PageHeader title="Financeiro" subtitle="Controle mensal de receitas, gastos fixos e variáveis">
         <Input type="month" value={mes} onChange={(e) => setMes(e.target.value || mesAtual)} className="num w-44" aria-label="Mês de análise" />
       </PageHeader>
+      <div className="card-surface mb-6 flex flex-wrap items-end gap-3 p-5">
+        <div className="min-w-64 flex-1">
+          <Label>Percentual de custo da mão de obra</Label>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Aplicado sobre a mão de obra cobrada nas próximas OS finalizadas. O percentual usado fica congelado no histórico.
+          </p>
+        </div>
+        <div className="flex items-end gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="percentual-custo-mao-obra">Percentual</Label>
+            <Input id="percentual-custo-mao-obra" type="number" min="0" max="100" step="0.01" className="num w-28" value={percentualMaoObra} onChange={(e) => setPercentualMaoObra(e.target.value)} />
+          </div>
+          <span className="pb-2">%</span>
+          <Button onClick={() => salvarPercentualMaoObra.mutate()} disabled={salvarPercentualMaoObra.isPending}>
+            {salvarPercentualMaoObra.isPending ? "Salvando..." : "Salvar custo"}
+          </Button>
+        </div>
+      </div>
       <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {resumo.map(([label, value, tone]) => <Kpi key={label} label={label} value={brl(value)} tone={tone} />)}
       </div>

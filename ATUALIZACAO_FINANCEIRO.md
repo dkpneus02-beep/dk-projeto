@@ -168,3 +168,22 @@ Também permanece pendente a inclusão de custo direto de mão de obra na margem
 ## Estado atual de publicação
 
 A branch local continua sendo `feat/catalogo-pecas-referencias`, baseada em `feat/orcamentos-temporarios`. O Supabase recebeu a migração para viabilizar a validação funcional. O Netlify não recebeu deploy e continua aguardando autorização explícita.
+
+
+## Sétima etapa — custo histórico de mão de obra
+
+Foi criada e aplicada a migração `supabase/migrations/20260923171000_custo_mao_obra_financeiro.sql`. O gerente agora pode configurar um percentual de custo direto da mão de obra entre 0% e 100%. Esse percentual é aplicado sobre o valor de mão de obra cobrado em cada serviço e não sobre o preço de peças.
+
+Na finalização da OS, o percentual vigente é capturado junto com a base de mão de obra, o mecânico responsável e o custo calculado. O registro fica congelado no livro-razão `atendimento_mao_obra_custos`. Alterar o percentual no futuro não modifica OS antigas.
+
+Quando uma OS finalizada é reaberta, o sistema cria lançamentos de estorno do custo histórico da mão de obra. A operação acontece junto do estorno das peças no mesmo gatilho transacional de mudança de status. O DRE mensal calcula o custo líquido como consumo menos estorno.
+
+A tela `/financeiro` recebeu o campo `Percentual de custo da mão de obra` e o botão de salvamento exclusivo para gerente. O DRE passou a mostrar `Custo de mão de obra` e `Resultado após custos diretos`, que desconta o CMV de peças e o custo de mão de obra do resultado operacional.
+
+A configuração inicial foi criada com **0,00%**. Isso foi intencional para que nenhuma OS existente ou futura seja alterada por uma suposição de custo antes de o gerente informar o percentual real da oficina.
+
+### Validação da sétima etapa
+
+O Supabase confirmou a existência da configuração inicial, com percentual de 0,00%, zero lançamentos indevidos e zero divergências entre a base, o percentual e o custo total arredondado para centavos. O `npm run build` terminou com sucesso após a inclusão da nova tela, dos tipos TypeScript e da migração.
+
+A etapa foi implementada sem criar dados reais de teste e sem alterar OS existentes. Nenhum deploy foi realizado.

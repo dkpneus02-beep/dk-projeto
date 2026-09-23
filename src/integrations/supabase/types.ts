@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      atendimento_mao_obra_custos: {
+        Row: {
+          atendimento_id: string
+          atendimento_servico_id: string
+          base_mao_obra: number
+          criado_em: string
+          custo_total: number
+          id: string
+          mecanico_id: string | null
+          percentual: number
+          tipo: string
+        }
+        Insert: {
+          atendimento_id: string
+          atendimento_servico_id: string
+          base_mao_obra: number
+          criado_em?: string
+          custo_total: number
+          id?: string
+          mecanico_id?: string | null
+          percentual: number
+          tipo: string
+        }
+        Update: {
+          atendimento_id?: string
+          atendimento_servico_id?: string
+          base_mao_obra?: number
+          criado_em?: string
+          custo_total?: number
+          id?: string
+          mecanico_id?: string | null
+          percentual?: number
+          tipo?: string
+        }
+        Relationships: []
+      }
+      financeiro_parametros: {
+        Row: {
+          custo_mao_obra_percentual: number
+          id: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          custo_mao_obra_percentual?: number
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          custo_mao_obra_percentual?: number
+          id?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       atendimento_pecas_cmv: {
         Row: {
           atendimento_id: string
