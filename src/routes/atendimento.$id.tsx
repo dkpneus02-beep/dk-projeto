@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { TablesUpdate } from "@/integrations/supabase/types";
+import type { Tables, TablesUpdate } from "@/integrations/supabase/types";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,24 @@ export const Route = createFileRoute("/atendimento/$id")({
   component: AtendimentoPage,
 });
 
+type PecaReferencia = Tables<"peca_referencias">;
+
+const nomeReferencia = (referencia: PecaReferencia) =>
+  [referencia.marca, referencia.referencia].filter(Boolean).join(" ");
+
+const resumoReferencias = (referencias: PecaReferencia[]) => {
+  if (referencias.length === 0) return "";
+  const principal = referencias.find((referencia) => referencia.principal) ?? referencias[0];
+  if (!principal) return "";
+  const equivalentes = referencias
+    .filter((referencia) => referencia.id !== principal.id)
+    .map(nomeReferencia)
+    .filter(Boolean);
+  const partes = [nomeReferencia(principal)];
+  if (equivalentes.length > 0) partes.push(`equivalentes: ${equivalentes.join(", ")}`);
+  return partes.filter(Boolean).join(" · ");
+};
+
 function AtendimentoPage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
@@ -67,7 +85,9 @@ function AtendimentoPage() {
   const [fotoBusy, setFotoBusy] = useState(false);
   const [fotoInputKey, setFotoInputKey] = useState(0);
   const [fotoSelecionada, setFotoSelecionada] = useState<string | null>(null);
-  const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
+  const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>(
+    {},
+  );
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
     servicos: Parameters<typeof printReceipt>[1];
@@ -127,6 +147,30 @@ function AtendimentoPage() {
     },
     enabled: !!role,
   });
+  const { data: referencias = [] } = useQuery({
+    queryKey: ["peca-referencias-ativas-atendimento"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("peca_referencias")
+        .select("*")
+        .is("deleted_at", null)
+        .order("principal", { ascending: false })
+        .order("marca")
+        .order("referencia");
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: Boolean(user && role),
+  });
+  const referenciasPorPeca = useMemo(() => {
+    const agrupadas = new Map<string, PecaReferencia[]>();
+    referencias.forEach((referencia) => {
+      const atuais = agrupadas.get(referencia.peca_id) ?? [];
+      atuais.push(referencia);
+      agrupadas.set(referencia.peca_id, atuais);
+    });
+    return agrupadas;
+  }, [referencias]);
 
   const { data: config } = useQuery({
     queryKey: ["configuracoes"],
@@ -261,12 +305,17 @@ function AtendimentoPage() {
     try {
       const novasFotos: VistoriaFoto[] = [];
       for (const [index, file] of Array.from(files).entries()) {
-        const foto = await uploadVistoriaImgBB(file, `vistoria-${data.placa}-${fotos.length + index + 1}`);
+        const foto = await uploadVistoriaImgBB(
+          file,
+          `vistoria-${data.placa}-${fotos.length + index + 1}`,
+        );
         novasFotos.push({ url: foto.url, deleteUrl: foto.deleteUrl });
       }
       if (novasFotos.length) {
         await salvarAtendimento.mutateAsync({ fotos: [...fotos, ...novasFotos] });
-        toast.success(`${novasFotos.length} foto(s) publicada(s) no ImgBB e adicionada(s) à vistoria`);
+        toast.success(
+          `${novasFotos.length} foto(s) publicada(s) no ImgBB e adicionada(s) à vistoria`,
+        );
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível anexar as fotos.");
@@ -359,7 +408,9 @@ function AtendimentoPage() {
           <div className="card-surface p-5">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase">Serviços</h2>
-              <span className="num text-sm text-muted-foreground">Total dos serviços: {brl(total)}</span>
+              <span className="num text-sm text-muted-foreground">
+                Total dos serviços: {brl(total)}
+              </span>
             </div>
 
             <div className="space-y-3">
@@ -367,8 +418,21 @@ function AtendimentoPage() {
                 const filtroPeca = filtrosPeca[s.id] ?? { busca: "", tipo: "todos" };
                 const pecasFiltradas = (pecas ?? []).filter(
                   (p) =>
-                    (filtroPeca.tipo === "todos" || p.tipo === filtroPeca.tipo || p.categoria === filtroPeca.tipo) &&
-                    matches(filtroPeca.busca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
+                    (filtroPeca.tipo === "todos" ||
+                      p.tipo === filtroPeca.tipo ||
+                      p.categoria === filtroPeca.tipo) &&
+                    matches(filtroPeca.busca, [
+                      p.nome,
+                      p.sku,
+                      p.marca,
+                      p.medida,
+                      p.modelo_desenho,
+                      ...(referenciasPorPeca.get(p.id) ?? []).flatMap((referencia) => [
+                        referencia.marca,
+                        referencia.referencia,
+                        referencia.observacao,
+                      ]),
+                    ]),
                 );
                 const statusTone =
                   s.status === "concluido"
@@ -383,282 +447,315 @@ function AtendimentoPage() {
                       ? "fa-screwdriver-wrench"
                       : "fa-hourglass-half";
                 return (
-                <div key={s.id} className={`overflow-hidden rounded-lg border border-l-4 bg-card p-4 shadow-sm ${statusTone}`}>
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        <i className={`fa-solid ${statusIcon} mr-1.5`} /> Serviço
-                      </p>
-                      <p className="truncate text-base font-semibold">{s.nome}</p>
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                        <span>
-                          <i className="fa-regular fa-clock mr-1" />
-                          Início: {s.iniciado_at ? dt(s.iniciado_at) : "aguardando"}
-                        </span>
-                        <span>
-                          <i className="fa-solid fa-flag-checkered mr-1" />
-                          Fim: {s.concluido_at ? dt(s.concluido_at) : "em aberto"}
-                        </span>
-                      </div>
-                      {s.peca_id && (
-                        <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                          <p><i className="fa-solid fa-box-open mr-1" /><strong>Produto do estoque:</strong> {(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "item do estoque"}</p>
-                          <p><strong>Quantidade:</strong> {Number(s.quantidade || 1)} · <strong>Valor registrado:</strong> {brl(s.valor)}</p>
+                  <div
+                    key={s.id}
+                    className={`overflow-hidden rounded-lg border border-l-4 bg-card p-4 shadow-sm ${statusTone}`}
+                  >
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          <i className={`fa-solid ${statusIcon} mr-1.5`} /> Serviço
+                        </p>
+                        <p className="truncate text-base font-semibold">{s.nome}</p>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          <span>
+                            <i className="fa-regular fa-clock mr-1" />
+                            Início: {s.iniciado_at ? dt(s.iniciado_at) : "aguardando"}
+                          </span>
+                          <span>
+                            <i className="fa-solid fa-flag-checkered mr-1" />
+                            Fim: {s.concluido_at ? dt(s.concluido_at) : "em aberto"}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={
-                          s.status === "concluido"
-                            ? "default"
-                            : s.status === "em_execucao"
-                              ? "secondary"
-                              : "outline"
-                        }
-                      >
-                        {statusLabel[s.status]}
-                      </Badge>
-                      {!finalizado && gerente && (
-                        <ConfirmActionDialog
-                          trigger={
-                            <button
-                              className="text-muted-foreground hover:text-destructive"
-                              title={`Excluir serviço ${s.nome}`}
-                            >
-                              <i className="fa-solid fa-trash-can text-xs" />
-                            </button>
-                          }
-                          title="Excluir serviço da OS"
-                          description={
-                            <>
-                              Tem certeza que deseja excluir <strong className="text-foreground">{s.nome}</strong> desta OS?
-                              Essa ação remove o serviço do atendimento.
-                            </>
-                          }
-                          confirmLabel="Excluir serviço"
-                          destructive
-                          onConfirm={() => delServico.mutateAsync(s.id)}
-                        />
-                      )}
-                    </div>
-                  </div>
-                  {!finalizado &&
-                    (gerente || canEditServico(role, s.mecanico_id, mecanicoId)) && (
-                    <div className="mt-3 grid gap-2 rounded-md bg-muted/20 p-3 sm:grid-cols-3">
-                      <div className="space-y-1.5">
-                        <Label>Status do serviço</Label>
-                        <Select
-                          value={s.status}
-                          onValueChange={(v) =>
-                            updServico.mutate({ sid: s.id, patch: { status: v } })
+                        {s.peca_id && (
+                          <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                            <p>
+                              <i className="fa-solid fa-box-open mr-1" />
+                              <strong>Produto do estoque:</strong>{" "}
+                              {(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ??
+                                "item do estoque"}
+                            </p>
+                            <p>
+                              <strong>Quantidade:</strong> {Number(s.quantidade || 1)} ·{" "}
+                              <strong>Valor registrado:</strong> {brl(s.valor)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            s.status === "concluido"
+                              ? "default"
+                              : s.status === "em_execucao"
+                                ? "secondary"
+                                : "outline"
                           }
                         >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="aguardando">Aguardando</SelectItem>
-                          <SelectItem value="em_execucao">Em execução</SelectItem>
-                          <SelectItem value="concluido">Concluído</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          {statusLabel[s.status]}
+                        </Badge>
+                        {!finalizado && gerente && (
+                          <ConfirmActionDialog
+                            trigger={
+                              <button
+                                className="text-muted-foreground hover:text-destructive"
+                                title={`Excluir serviço ${s.nome}`}
+                              >
+                                <i className="fa-solid fa-trash-can text-xs" />
+                              </button>
+                            }
+                            title="Excluir serviço da OS"
+                            description={
+                              <>
+                                Tem certeza que deseja excluir{" "}
+                                <strong className="text-foreground">{s.nome}</strong> desta OS? Essa
+                                ação remove o serviço do atendimento.
+                              </>
+                            }
+                            confirmLabel="Excluir serviço"
+                            destructive
+                            onConfirm={() => delServico.mutateAsync(s.id)}
+                          />
+                        )}
                       </div>
-                      <div className="space-y-1.5">
-                        <Label>Responsável pelo serviço</Label>
-                        <Select
-                          value={s.mecanico_id ?? "none"}
-                          disabled={!gerente}
-                          onValueChange={(v) =>
-                            updServico.mutate({
-                              sid: s.id,
-                              patch: { mecanico_id: v === "none" ? null : v },
-                            })
-                          }
-                        >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Mecânico" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sem mecânico</SelectItem>
-                          {(mecanicos ?? []).map((m) => (
-                            <SelectItem key={m.id} value={m.id}>
-                              {m.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Preço da peça (R$)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          className="num"
-                          key={`${s.id}-preco-${s.preco_peca ?? 0}`}
-                          defaultValue={Number(s.preco_peca ?? 0)}
-                          onBlur={(e) =>
-                            updServico.mutate({
-                              sid: s.id,
-                              patch: { preco_peca: Math.max(Number(e.target.value) || 0, 0) },
-                            })
-                          }
-                        />
-                        <Label>Mão de obra/adicional (R$)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          className="num"
-                          defaultValue={Number(s.mao_de_obra ?? 0)}
-                          onBlur={(e) =>
-                            updServico.mutate({
-                              sid: s.id,
-                              patch: { mao_de_obra: Math.max(Number(e.target.value) || 0, 0) },
-                            })
-                          }
-                        />
-                        <p className="text-xs font-semibold text-primary">Total: <span className="num">{brl(s.valor)}</span></p>
-                      </div>
-                      <div className="grid gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[1fr_120px]">
-                        <div className="space-y-1.5">
-                          <Label>Produto/peça/óleo/pneu usado</Label>
-                        <div className="space-y-2">
-                          <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
+                    </div>
+                    {!finalizado &&
+                      (gerente || canEditServico(role, s.mecanico_id, mecanicoId)) && (
+                        <div className="mt-3 grid gap-2 rounded-md bg-muted/20 p-3 sm:grid-cols-3">
+                          <div className="space-y-1.5">
+                            <Label>Status do serviço</Label>
                             <Select
-                              value={filtroPeca.tipo}
-                              onValueChange={(tipo) =>
-                                setFiltrosPeca((atual) => ({
-                                  ...atual,
-                                  [s.id]: { ...filtroPeca, tipo },
-                                }))
+                              value={s.status}
+                              onValueChange={(v) =>
+                                updServico.mutate({ sid: s.id, patch: { status: v } })
                               }
                             >
-                              <SelectTrigger aria-label="Filtrar estoque por tipo">
-                                <SelectValue placeholder="Tipo" />
+                              <SelectTrigger>
+                                <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="todos">Todos os tipos</SelectItem>
-                                <SelectItem value="pneu">Pneus</SelectItem>
-                                <SelectItem value="peca">Peças e insumos</SelectItem>
+                                <SelectItem value="aguardando">Aguardando</SelectItem>
+                                <SelectItem value="em_execucao">Em execução</SelectItem>
+                                <SelectItem value="concluido">Concluído</SelectItem>
                               </SelectContent>
                             </Select>
-                            <Input
-                              value={filtroPeca.busca}
-                              onChange={(e) =>
-                                setFiltrosPeca((atual) => ({
-                                  ...atual,
-                                  [s.id]: { ...filtroPeca, busca: e.target.value },
-                                }))
-                              }
-                              placeholder="Buscar por nome, SKU, código, marca ou medida..."
-                              aria-label="Buscar item do estoque"
-                            />
                           </div>
+                          <div className="space-y-1.5">
+                            <Label>Responsável pelo serviço</Label>
+                            <Select
+                              value={s.mecanico_id ?? "none"}
+                              disabled={!gerente}
+                              onValueChange={(v) =>
+                                updServico.mutate({
+                                  sid: s.id,
+                                  patch: { mecanico_id: v === "none" ? null : v },
+                                })
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Mecânico" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Sem mecânico</SelectItem>
+                                {(mecanicos ?? []).map((m) => (
+                                  <SelectItem key={m.id} value={m.id}>
+                                    {m.nome}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Preço da peça (R$)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              className="num"
+                              key={`${s.id}-preco-${s.preco_peca ?? 0}`}
+                              defaultValue={Number(s.preco_peca ?? 0)}
+                              onBlur={(e) =>
+                                updServico.mutate({
+                                  sid: s.id,
+                                  patch: { preco_peca: Math.max(Number(e.target.value) || 0, 0) },
+                                })
+                              }
+                            />
+                            <Label>Mão de obra/adicional (R$)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              className="num"
+                              defaultValue={Number(s.mao_de_obra ?? 0)}
+                              onBlur={(e) =>
+                                updServico.mutate({
+                                  sid: s.id,
+                                  patch: { mao_de_obra: Math.max(Number(e.target.value) || 0, 0) },
+                                })
+                              }
+                            />
+                            <p className="text-xs font-semibold text-primary">
+                              Total: <span className="num">{brl(s.valor)}</span>
+                            </p>
+                          </div>
+                          <div className="grid gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[1fr_120px]">
+                            <div className="space-y-1.5">
+                              <Label>Produto/peça/óleo/pneu usado</Label>
+                              <div className="space-y-2">
+                                <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
+                                  <Select
+                                    value={filtroPeca.tipo}
+                                    onValueChange={(tipo) =>
+                                      setFiltrosPeca((atual) => ({
+                                        ...atual,
+                                        [s.id]: { ...filtroPeca, tipo },
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger aria-label="Filtrar estoque por tipo">
+                                      <SelectValue placeholder="Tipo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="todos">Todos os tipos</SelectItem>
+                                      <SelectItem value="pneu">Pneus</SelectItem>
+                                      <SelectItem value="peca">Peças e insumos</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    value={filtroPeca.busca}
+                                    onChange={(e) =>
+                                      setFiltrosPeca((atual) => ({
+                                        ...atual,
+                                        [s.id]: { ...filtroPeca, busca: e.target.value },
+                                      }))
+                                    }
+                                    placeholder="Buscar por nome, SKU, código, marca ou medida..."
+                                    aria-label="Buscar item do estoque"
+                                  />
+                                </div>
+                                <Select
+                                  value={s.peca_id ?? "none"}
+                                  onValueChange={(v) => {
+                                    const peca = (pecas ?? []).find((p) => p.id === v);
+                                    updServico.mutate({
+                                      sid: s.id,
+                                      patch: {
+                                        peca_id: v === "none" ? null : v,
+                                        quantidade: s.quantidade || 1,
+                                        preco_peca:
+                                          peca && v !== "none"
+                                            ? Number(peca.preco_venda) * Number(s.quantidade || 1)
+                                            : 0,
+                                      },
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Peça/óleo/pneu usado (opcional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">Sem peça vinculada</SelectItem>
+                                    {pecasFiltradas.map((p) => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        {[
+                                          p.nome,
+                                          resumoReferencias(referenciasPorPeca.get(p.id) ?? []),
+                                          p.tipo === "pneu" ? "pneu" : "peça/insumo",
+                                          `estoque ${Number(p.estoque)}`,
+                                          brl(p.preco_venda),
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" · ")}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <p className="text-xs text-muted-foreground">
+                                  {pecasFiltradas.length} item(ns) encontrado(s) · a baixa ocorre
+                                  somente na finalização da OS
+                                </p>
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label>Quantidade usada</Label>
+                              </div>
+                              <Input
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                className="num"
+                                defaultValue={Number(s.quantidade || 1)}
+                                disabled={!s.peca_id}
+                                aria-label="Quantidade da peça"
+                                onBlur={(e) => {
+                                  const quantidade = Math.max(Number(e.target.value) || 1, 0.01);
+                                  const pecaSelecionada = (pecas ?? []).find(
+                                    (p) => p.id === s.peca_id,
+                                  );
+                                  updServico.mutate({
+                                    sid: s.id,
+                                    patch: {
+                                      quantidade,
+                                      ...(pecaSelecionada
+                                        ? {
+                                            preco_peca:
+                                              Number(pecaSelecionada.preco_venda) * quantidade,
+                                          }
+                                        : {}),
+                                    },
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    {!finalizado &&
+                      !gerente &&
+                      !canEditServico(role, s.mecanico_id, mecanicoId) && (
+                        <div className="mt-3 space-y-2 rounded-md border border-primary/10 bg-muted/20 p-3">
+                          {/* Serviço de outro mecânico: somente status quando a regra permitir. */}
                           <Select
-                            value={s.peca_id ?? "none"}
-                            onValueChange={(v) => {
-                            const peca = (pecas ?? []).find((p) => p.id === v);
-                            updServico.mutate({
-                              sid: s.id,
-                              patch: {
-                                peca_id: v === "none" ? null : v,
-                                quantidade: s.quantidade || 1,
-                                preco_peca: peca && v !== "none" ? Number(peca.preco_venda) * Number(s.quantidade || 1) : 0,
-                              },
-                            });
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Peça/óleo/pneu usado (opcional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Sem peça vinculada</SelectItem>
-                            {pecasFiltradas.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.nome} · {p.tipo === "pneu" ? "pneu" : "peça/insumo"} · estoque {Number(p.estoque)} · {brl(p.preco_venda)}
-                              </SelectItem>
-                            ))}
+                            value={s.status}
+                            disabled={!canEditServico(role, s.mecanico_id, mecanicoId)}
+                            onValueChange={(v) =>
+                              updServico.mutate({ sid: s.id, patch: { status: v } })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="aguardando">Aguardando</SelectItem>
+                              <SelectItem value="em_execucao">Em execução</SelectItem>
+                              <SelectItem value="concluido">Concluído</SelectItem>
                             </SelectContent>
                           </Select>
-                          <p className="text-xs text-muted-foreground">
-                            {pecasFiltradas.length} item(ns) encontrado(s) · a baixa ocorre somente na finalização da OS
+                          {!canEditServico(role, s.mecanico_id, mecanicoId) && (
+                            <p className="text-xs text-muted-foreground">
+                              <i className="fa-solid fa-lock mr-1" />
+                              {s.mecanico_id
+                                ? "Atribuído a outro mecânico — aguarde o gerente."
+                                : "Ainda sem mecânico atribuído — peça ao gerente."}
+                            </p>
+                          )}
+                          <p className="text-sm text-muted-foreground">
+                            <strong>Responsável:</strong>{" "}
+                            <span className="font-medium text-foreground">
+                              {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ??
+                                "sem mecânico atribuído"}
+                            </span>{" "}
+                            · <strong>Preço registrado:</strong>{" "}
+                            <span className="num">{brl(s.valor)}</span>
                           </p>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label>Quantidade usada</Label>
-                        </div>
-                        <Input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          className="num"
-                          defaultValue={Number(s.quantidade || 1)}
-                          disabled={!s.peca_id}
-                          aria-label="Quantidade da peça"
-                          onBlur={(e) => {
-                            const quantidade = Math.max(Number(e.target.value) || 1, 0.01);
-                            const pecaSelecionada = (pecas ?? []).find((p) => p.id === s.peca_id);
-                            updServico.mutate({
-                              sid: s.id,
-                              patch: {
-                                quantidade,
-                                ...(pecaSelecionada
-                                  ? { preco_peca: Number(pecaSelecionada.preco_venda) * quantidade }
-                                  : {}),
-                              },
-                            });
-                          }}
-                        />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {!finalizado &&
-                    !gerente &&
-                    !canEditServico(role, s.mecanico_id, mecanicoId) && (
-                    <div className="mt-3 space-y-2 rounded-md border border-primary/10 bg-muted/20 p-3">
-                      {/* Serviço de outro mecânico: somente status quando a regra permitir. */}
-                      <Select
-                        value={s.status}
-                        disabled={!canEditServico(role, s.mecanico_id, mecanicoId)}
-                        onValueChange={(v) =>
-                          updServico.mutate({ sid: s.id, patch: { status: v } })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="aguardando">Aguardando</SelectItem>
-                          <SelectItem value="em_execucao">Em execução</SelectItem>
-                          <SelectItem value="concluido">Concluído</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {!canEditServico(role, s.mecanico_id, mecanicoId) && (
-                        <p className="text-xs text-muted-foreground">
-                          <i className="fa-solid fa-lock mr-1" />
-                          {s.mecanico_id
-                            ? "Atribuído a outro mecânico — aguarde o gerente."
-                            : "Ainda sem mecânico atribuído — peça ao gerente."}
-                        </p>
                       )}
-                      <p className="text-sm text-muted-foreground">
+                    {finalizado && (
+                      <p className="mt-1 border-t pt-3 text-sm text-muted-foreground">
                         <strong>Responsável:</strong>{" "}
-                        <span className="font-medium text-foreground">
-                          {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ??
-                            "sem mecânico atribuído"}
-                        </span>{" "}
-                      · <strong>Preço registrado:</strong> <span className="num">{brl(s.valor)}</span>
-                    </p>
-                    </div>
-                  )}
-                  {finalizado && (
-                    <p className="mt-1 border-t pt-3 text-sm text-muted-foreground">
-                      <strong>Responsável:</strong> {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ?? "—"}{" "}
-                      · <span className="num">{brl(s.valor)}</span>
-                    </p>
-                  )}
-                </div>
+                        {(mecanicos ?? []).find((m) => m.id === s.mecanico_id)?.nome ?? "—"} ·{" "}
+                        <span className="num">{brl(s.valor)}</span>
+                      </p>
+                    )}
+                  </div>
                 );
               })}
               {servicos.length === 0 && (
@@ -690,9 +787,22 @@ function AtendimentoPage() {
                       {a}
                       {gerente && !finalizado && (
                         <ConfirmActionDialog
-                          trigger={<button type="button" className="ml-1 text-muted-foreground hover:text-destructive" title={`Remover avaria ${a}`}><i className="fa-solid fa-xmark" /></button>}
+                          trigger={
+                            <button
+                              type="button"
+                              className="ml-1 text-muted-foreground hover:text-destructive"
+                              title={`Remover avaria ${a}`}
+                            >
+                              <i className="fa-solid fa-xmark" />
+                            </button>
+                          }
                           title="Remover avaria"
-                          description={<>Tem certeza que deseja remover <strong className="text-foreground">{a}</strong> da vistoria?</>}
+                          description={
+                            <>
+                              Tem certeza que deseja remover{" "}
+                              <strong className="text-foreground">{a}</strong> da vistoria?
+                            </>
+                          }
                           confirmLabel="Remover avaria"
                           destructive
                           onConfirm={() => removerAvaria(a)}
@@ -703,8 +813,17 @@ function AtendimentoPage() {
                 </div>
                 {!finalizado && gerente && (
                   <div className="mt-3 flex gap-2">
-                    <Input value={novaAvaria} onChange={(e) => setNovaAvaria(e.target.value)} placeholder="Adicionar nova avaria ou observação" />
-                    <Button type="button" variant="outline" onClick={() => void adicionarAvaria()} disabled={!novaAvaria.trim() || salvarAtendimento.isPending}>
+                    <Input
+                      value={novaAvaria}
+                      onChange={(e) => setNovaAvaria(e.target.value)}
+                      placeholder="Adicionar nova avaria ou observação"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void adicionarAvaria()}
+                      disabled={!novaAvaria.trim() || salvarAtendimento.isPending}
+                    >
                       <i className="fa-solid fa-plus" /> Adicionar
                     </Button>
                   </div>
@@ -714,8 +833,15 @@ function AtendimentoPage() {
             {fotos.length > 0 && (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {fotos.map((foto, index) => (
-                  <div key={foto.url} className="relative overflow-hidden rounded-lg border bg-muted/20">
-                    <button type="button" className="block w-full" onClick={() => setFotoSelecionada(foto.url)}>
+                  <div
+                    key={foto.url}
+                    className="relative overflow-hidden rounded-lg border bg-muted/20"
+                  >
+                    <button
+                      type="button"
+                      className="block w-full"
+                      onClick={() => setFotoSelecionada(foto.url)}
+                    >
                       <img
                         src={foto.url}
                         alt={`Foto ${index + 1} da vistoria do veículo`}
@@ -784,17 +910,26 @@ function AtendimentoPage() {
                   </label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {fotoBusy ? "Compactando e publicando as fotos…" : "Você pode adicionar várias fotos e visualizar qualquer uma tocando nela."}
+                  {fotoBusy
+                    ? "Compactando e publicando as fotos…"
+                    : "Você pode adicionar várias fotos e visualizar qualquer uma tocando nela."}
                 </p>
               </div>
             )}
-            <Dialog open={Boolean(fotoSelecionada)} onOpenChange={(open) => !open && setFotoSelecionada(null)}>
+            <Dialog
+              open={Boolean(fotoSelecionada)}
+              onOpenChange={(open) => !open && setFotoSelecionada(null)}
+            >
               <DialogContent className="max-w-4xl p-2 sm:p-4">
                 <DialogHeader>
                   <DialogTitle className="sr-only">Visualização da foto da vistoria</DialogTitle>
                 </DialogHeader>
                 {fotoSelecionada && (
-                  <img src={fotoSelecionada} alt="Foto ampliada da vistoria" className="max-h-[75vh] w-full rounded-md object-contain" />
+                  <img
+                    src={fotoSelecionada}
+                    alt="Foto ampliada da vistoria"
+                    className="max-h-[75vh] w-full rounded-md object-contain"
+                  />
                 )}
               </DialogContent>
             </Dialog>
@@ -1081,20 +1216,68 @@ function EditarDadosOsDialog({
           <DialogTitle className="font-display text-2xl uppercase">Editar dados da OS</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Use esta tela para corrigir dados digitados na abertura ou completar o CPF depois. O histórico da OS, estoque e pagamentos permanecem preservados.
+          Use esta tela para corrigir dados digitados na abertura ou completar o CPF depois. O
+          histórico da OS, estoque e pagamentos permanecem preservados.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2"><Label>Nome do cliente *</Label><Input value={form.cliente_nome} onChange={(e) => setField("cliente_nome", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Telefone</Label><Input value={form.cliente_telefone} onChange={(e) => setField("cliente_telefone", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>CPF</Label><Input value={form.cliente_cpf} onChange={(e) => setField("cliente_cpf", e.target.value)} placeholder="000.000.000-00" /></div>
-          <div className="space-y-1.5"><Label>Placa *</Label><Input value={form.placa} onChange={(e) => setField("placa", e.target.value.toUpperCase())} /></div>
-          <div className="space-y-1.5"><Label>Quilometragem</Label><Input type="number" min="0" value={form.km} onChange={(e) => setField("km", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Fabricante</Label><Input value={form.fabricante} onChange={(e) => setField("fabricante", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Modelo</Label><Input value={form.modelo} onChange={(e) => setField("modelo", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Cor</Label><Input value={form.cor} onChange={(e) => setField("cor", e.target.value)} /></div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Nome do cliente *</Label>
+            <Input
+              value={form.cliente_nome}
+              onChange={(e) => setField("cliente_nome", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Telefone</Label>
+            <Input
+              value={form.cliente_telefone}
+              onChange={(e) => setField("cliente_telefone", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>CPF</Label>
+            <Input
+              value={form.cliente_cpf}
+              onChange={(e) => setField("cliente_cpf", e.target.value)}
+              placeholder="000.000.000-00"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Placa *</Label>
+            <Input
+              value={form.placa}
+              onChange={(e) => setField("placa", e.target.value.toUpperCase())}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Quilometragem</Label>
+            <Input
+              type="number"
+              min="0"
+              value={form.km}
+              onChange={(e) => setField("km", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Fabricante</Label>
+            <Input
+              value={form.fabricante}
+              onChange={(e) => setField("fabricante", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Modelo</Label>
+            <Input value={form.modelo} onChange={(e) => setField("modelo", e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Cor</Label>
+            <Input value={form.cor} onChange={(e) => setField("cor", e.target.value)} />
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
           <Button onClick={() => void submit()} disabled={saving}>
             {saving && <i className="fa-solid fa-circle-notch fa-spin" />}
             Salvar alterações
@@ -1132,7 +1315,9 @@ function ChecklistServicos({
 
   useEffect(() => {
     try {
-      setFavoritos(JSON.parse(localStorage.getItem("dk-pneus-servicos-favoritos") ?? "[]") as string[]);
+      setFavoritos(
+        JSON.parse(localStorage.getItem("dk-pneus-servicos-favoritos") ?? "[]") as string[],
+      );
     } catch {
       setFavoritos([]);
     }
@@ -1157,7 +1342,13 @@ function ChecklistServicos({
       </p>
       <div className="mb-3 flex flex-wrap gap-2">
         {rapidos.map((nome) => (
-          <Button key={nome} type="button" variant="outline" size="sm" onClick={() => adicionarRapido(nome)}>
+          <Button
+            key={nome}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => adicionarRapido(nome)}
+          >
             <i className="fa-solid fa-bolt" /> {nome}
           </Button>
         ))}
@@ -1194,7 +1385,9 @@ function ChecklistServicos({
                 className="text-muted-foreground hover:text-primary"
                 title={favorito ? "Remover dos favoritos" : "Adicionar aos favoritos"}
                 onClick={() => {
-                  const proximo = favorito ? favoritos.filter((id) => id !== c.id) : [...favoritos, c.id];
+                  const proximo = favorito
+                    ? favoritos.filter((id) => id !== c.id)
+                    : [...favoritos, c.id];
                   setFavoritos(proximo);
                   localStorage.setItem("dk-pneus-servicos-favoritos", JSON.stringify(proximo));
                 }}
@@ -1229,7 +1422,7 @@ function ChecklistServicos({
   );
 }
 
-  type Servico = {
+type Servico = {
   id: string;
   nome: string;
   valor: number;

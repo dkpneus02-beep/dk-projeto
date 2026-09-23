@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BackupRouteImport } from './routes/backup'
 import { Route as CaixaRouteImport } from './routes/caixa'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
+import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as HistoricoRouteImport } from './routes/historico'
 import { Route as MecanicosRouteImport } from './routes/mecanicos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
@@ -49,6 +50,11 @@ const CaixaRoute = CaixaRouteImport.update({
 const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
   id: '/configuracoes',
   path: '/configuracoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinanceiroRoute = FinanceiroRouteImport.update({
+  id: '/financeiro',
+  path: '/financeiro',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoricoRoute = HistoricoRouteImport.update({
@@ -113,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/backup': typeof BackupRoute
   '/caixa': typeof CaixaRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/financeiro': typeof FinanceiroRoute
   '/historico': typeof HistoricoRoute
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/backup': typeof BackupRoute
   '/caixa': typeof CaixaRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/financeiro': typeof FinanceiroRoute
   '/historico': typeof HistoricoRoute
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/backup': typeof BackupRoute
   '/caixa': typeof CaixaRoute
   '/configuracoes': typeof ConfiguracoesRoute
+  '/financeiro': typeof FinanceiroRoute
   '/historico': typeof HistoricoRoute
   '/mecanicos': typeof MecanicosRoute
   '/notificacoes': typeof NotificacoesRoute
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/caixa'
     | '/configuracoes'
+    | '/financeiro'
     | '/historico'
     | '/mecanicos'
     | '/notificacoes'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/caixa'
     | '/configuracoes'
+    | '/financeiro'
     | '/historico'
     | '/mecanicos'
     | '/notificacoes'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/backup'
     | '/caixa'
     | '/configuracoes'
+    | '/financeiro'
     | '/historico'
     | '/mecanicos'
     | '/notificacoes'
@@ -225,6 +237,7 @@ export interface RootRouteChildren {
   BackupRoute: typeof BackupRoute
   CaixaRoute: typeof CaixaRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
+  FinanceiroRoute: typeof FinanceiroRoute
   HistoricoRoute: typeof HistoricoRoute
   MecanicosRoute: typeof MecanicosRoute
   NotificacoesRoute: typeof NotificacoesRoute
@@ -273,6 +286,13 @@ declare module '@tanstack/react-router' {
       path: '/configuracoes'
       fullPath: '/configuracoes'
       preLoaderRoute: typeof ConfiguracoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/financeiro': {
+      id: '/financeiro'
+      path: '/financeiro'
+      fullPath: '/financeiro'
+      preLoaderRoute: typeof FinanceiroRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/historico': {
@@ -361,6 +381,7 @@ const rootRouteChildren: RootRouteChildren = {
   BackupRoute: BackupRoute,
   CaixaRoute: CaixaRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,
+  FinanceiroRoute: FinanceiroRoute,
   HistoricoRoute: HistoricoRoute,
   MecanicosRoute: MecanicosRoute,
   NotificacoesRoute: NotificacoesRoute,
