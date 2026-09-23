@@ -10,10 +10,46 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      atendimento_pecas_cmv: {
+        Row: {
+          atendimento_id: string
+          atendimento_servico_id: string
+          criado_em: string
+          custo_total: number
+          custo_unitario: number
+          id: string
+          peca_id: string
+          quantidade: number
+          tipo: string
+        }
+        Insert: {
+          atendimento_id: string
+          atendimento_servico_id: string
+          criado_em?: string
+          custo_total: number
+          custo_unitario: number
+          id?: string
+          peca_id: string
+          quantidade: number
+          tipo: string
+        }
+        Update: {
+          atendimento_id?: string
+          atendimento_servico_id?: string
+          criado_em?: string
+          custo_total?: number
+          custo_unitario?: number
+          id?: string
+          peca_id?: string
+          quantidade?: number
+          tipo?: string
+        }
+        Relationships: []
+      }
       atendimento_pecas_movimentos: {
         Row: {
           atendimento_id: string
@@ -487,6 +523,174 @@ export type Database = {
         }
         Relationships: []
       }
+      despesa_parcelas: {
+        Row: {
+          caixa_movimento_id: string | null
+          created_at: string
+          data_pagamento: string | null
+          data_vencimento: string
+          despesa_id: string
+          forma_pagamento: string | null
+          id: string
+          numero: number
+          status: string
+          updated_at: string
+          valor: number
+          valor_pago: number | null
+        }
+        Insert: {
+          caixa_movimento_id?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento: string
+          despesa_id: string
+          forma_pagamento?: string | null
+          id?: string
+          numero: number
+          status?: string
+          updated_at?: string
+          valor: number
+          valor_pago?: number | null
+        }
+        Update: {
+          caixa_movimento_id?: string | null
+          created_at?: string
+          data_pagamento?: string | null
+          data_vencimento?: string
+          despesa_id?: string
+          forma_pagamento?: string | null
+          id?: string
+          numero?: number
+          status?: string
+          updated_at?: string
+          valor?: number
+          valor_pago?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "despesa_parcelas_caixa_movimento_id_fkey"
+            columns: ["caixa_movimento_id"]
+            isOneToOne: false
+            referencedRelation: "caixa_movimentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "despesa_parcelas_despesa_id_fkey"
+            columns: ["despesa_id"]
+            isOneToOne: false
+            referencedRelation: "despesas_financeiras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      despesas_financeiras: {
+        Row: {
+          categoria_id: string | null
+          codigo_barras: string | null
+          competencia: string
+          comprovante_path: string | null
+          created_at: string
+          criado_por: string | null
+          data_emissao: string | null
+          data_vencimento: string
+          deleted_at: string | null
+          descricao: string
+          fornecedor: string | null
+          id: string
+          observacoes: string | null
+          recorrencia_meses: number
+          recorrencia_origem_id: string | null
+          recorrente: boolean
+          status: string
+          tipo: string
+          updated_at: string
+          valor_total: number
+        }
+        Insert: {
+          categoria_id?: string | null
+          codigo_barras?: string | null
+          competencia: string
+          comprovante_path?: string | null
+          created_at?: string
+          criado_por?: string | null
+          data_emissao?: string | null
+          data_vencimento: string
+          deleted_at?: string | null
+          descricao: string
+          fornecedor?: string | null
+          id?: string
+          observacoes?: string | null
+          recorrencia_meses?: number
+          recorrencia_origem_id?: string | null
+          recorrente?: boolean
+          status?: string
+          tipo: string
+          updated_at?: string
+          valor_total: number
+        }
+        Update: {
+          categoria_id?: string | null
+          codigo_barras?: string | null
+          competencia?: string
+          comprovante_path?: string | null
+          created_at?: string
+          criado_por?: string | null
+          data_emissao?: string | null
+          data_vencimento?: string
+          deleted_at?: string | null
+          descricao?: string
+          fornecedor?: string | null
+          id?: string
+          observacoes?: string | null
+          recorrencia_meses?: number
+          recorrencia_origem_id?: string | null
+          recorrente?: boolean
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "despesas_financeiras_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "financeiro_categorias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "despesas_financeiras_recorrencia_origem_id_fkey"
+            columns: ["recorrencia_origem_id"]
+            isOneToOne: false
+            referencedRelation: "despesas_financeiras"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financeiro_categorias: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          nome: string
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome: string
+          tipo?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
       mecanicos: {
         Row: {
           ativo: boolean
@@ -772,7 +976,13 @@ export type Database = {
       }
       orcamentos: {
         Row: {
+          ano_fabricacao_modelo: string | null
+          chassi: string | null
+          cilindrada: string | null
+          cliente_bairro_cidade: string | null
           cliente_cpf: string | null
+          cliente_email: string | null
+          cliente_endereco: string | null
           cliente_nome: string | null
           cliente_telefone: string | null
           cor: string | null
@@ -786,15 +996,25 @@ export type Database = {
           numero: number
           observacao: string | null
           os_id: string | null
+          pagamento_pix: boolean
           placa: string | null
+          placa_anterior: string | null
           status: string
           subtotal_mao_de_obra: number
           subtotal_pecas: number
+          subtotal_pneus: number
           total: number
           updated_at: string
+          veiculo_especie_tipo: string | null
         }
         Insert: {
+          ano_fabricacao_modelo?: string | null
+          chassi?: string | null
+          cilindrada?: string | null
+          cliente_bairro_cidade?: string | null
           cliente_cpf?: string | null
+          cliente_email?: string | null
+          cliente_endereco?: string | null
           cliente_nome?: string | null
           cliente_telefone?: string | null
           cor?: string | null
@@ -808,15 +1028,25 @@ export type Database = {
           numero?: number
           observacao?: string | null
           os_id?: string | null
+          pagamento_pix?: boolean
           placa?: string | null
+          placa_anterior?: string | null
           status?: string
           subtotal_mao_de_obra?: number
           subtotal_pecas?: number
+          subtotal_pneus?: number
           total?: number
           updated_at?: string
+          veiculo_especie_tipo?: string | null
         }
         Update: {
+          ano_fabricacao_modelo?: string | null
+          chassi?: string | null
+          cilindrada?: string | null
+          cliente_bairro_cidade?: string | null
           cliente_cpf?: string | null
+          cliente_email?: string | null
+          cliente_endereco?: string | null
           cliente_nome?: string | null
           cliente_telefone?: string | null
           cor?: string | null
@@ -830,12 +1060,16 @@ export type Database = {
           numero?: number
           observacao?: string | null
           os_id?: string | null
+          pagamento_pix?: boolean
           placa?: string | null
+          placa_anterior?: string | null
           status?: string
           subtotal_mao_de_obra?: number
           subtotal_pecas?: number
+          subtotal_pneus?: number
           total?: number
           updated_at?: string
+          veiculo_especie_tipo?: string | null
         }
         Relationships: [
           {
@@ -882,9 +1116,54 @@ export type Database = {
           },
         ]
       }
+      peca_referencias: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          marca: string
+          observacao: string | null
+          peca_id: string
+          principal: boolean
+          referencia: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          marca: string
+          observacao?: string | null
+          peca_id: string
+          principal?: boolean
+          referencia: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          marca?: string
+          observacao?: string | null
+          peca_id?: string
+          principal?: boolean
+          referencia?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peca_referencias_peca_id_fkey"
+            columns: ["peca_id"]
+            isOneToOne: false
+            referencedRelation: "pecas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pecas: {
         Row: {
           aceita_desconto_pix: boolean
+          aplicacao: string | null
           categoria: string
           construcao: string | null
           created_at: string
@@ -898,6 +1177,7 @@ export type Database = {
           medida: string | null
           modelo_desenho: string | null
           nome: string
+          observacoes: string | null
           preco_custo: number
           preco_venda: number
           simbolo_velocidade: string | null
@@ -907,6 +1187,7 @@ export type Database = {
         }
         Insert: {
           aceita_desconto_pix?: boolean
+          aplicacao?: string | null
           categoria?: string
           construcao?: string | null
           created_at?: string
@@ -920,6 +1201,7 @@ export type Database = {
           medida?: string | null
           modelo_desenho?: string | null
           nome: string
+          observacoes?: string | null
           preco_custo?: number
           preco_venda?: number
           simbolo_velocidade?: string | null
@@ -929,6 +1211,7 @@ export type Database = {
         }
         Update: {
           aceita_desconto_pix?: boolean
+          aplicacao?: string | null
           categoria?: string
           construcao?: string | null
           created_at?: string
@@ -942,6 +1225,7 @@ export type Database = {
           medida?: string | null
           modelo_desenho?: string | null
           nome?: string
+          observacoes?: string | null
           preco_custo?: number
           preco_venda?: number
           simbolo_velocidade?: string | null
@@ -1076,6 +1360,8 @@ export type Database = {
       adicionar_entrada_estoque: {
         Args: { _peca_id: string; _quantidade: number }
         Returns: {
+          aceita_desconto_pix: boolean
+          aplicacao: string | null
           categoria: string
           construcao: string | null
           created_at: string
@@ -1089,6 +1375,7 @@ export type Database = {
           medida: string | null
           modelo_desenho: string | null
           nome: string
+          observacoes: string | null
           preco_custo: number
           preco_venda: number
           simbolo_velocidade: string | null
@@ -1103,6 +1390,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      atualizar_alertas_financeiros: {
+        Args: { _antecedencia?: number; _hoje?: string }
+        Returns: number
+      }
       baixar_pecas_atendimento: {
         Args: { _atendimento_id: string }
         Returns: undefined
@@ -1110,6 +1401,10 @@ export type Database = {
       can_view_atendimento: {
         Args: { _atendimento_id: string }
         Returns: boolean
+      }
+      cancelar_despesa_financeira: {
+        Args: { _despesa_id: string }
+        Returns: undefined
       }
       criar_notificacao_interna: {
         Args: {
@@ -1124,6 +1419,21 @@ export type Database = {
           _titulo: string
         }
         Returns: string
+      }
+      editar_despesa_financeira: {
+        Args: {
+          _categoria_id: string
+          _competencia: string
+          _data_vencimento: string
+          _descricao: string
+          _despesa_id: string
+          _fornecedor: string
+          _observacoes: string
+          _recorrente: boolean
+          _tipo: string
+          _valor_total: number
+        }
+        Returns: undefined
       }
       enviar_notificacao_manual: {
         Args: {
@@ -1142,6 +1452,10 @@ export type Database = {
         Args: { _atendimento_id: string }
         Returns: undefined
       }
+      excluir_despesa_financeira: {
+        Args: { _despesa_id: string }
+        Returns: undefined
+      }
       finalizar_atendimento_transacional: {
         Args: {
           _atendimento_id: string
@@ -1151,6 +1465,10 @@ export type Database = {
           _pagamentos: Json
         }
         Returns: Json
+      }
+      gerar_despesas_recorrentes: {
+        Args: { _competencia: string }
+        Returns: number
       }
       has_role: {
         Args: {
@@ -1168,6 +1486,15 @@ export type Database = {
         Args: { _mecanico_id: string }
         Returns: boolean
       }
+      normalizar_referencia_peca: { Args: { valor: string }; Returns: string }
+      pagar_despesa_parcela: {
+        Args: {
+          _forma_pagamento: string
+          _parcela_id: string
+          _valor_pago?: number
+        }
+        Returns: Json
+      }
       proximo_numero_atendimento: { Args: never; Returns: number }
       reabrir_atendimento_transacional: {
         Args: { _atendimento_id: string }
@@ -1176,7 +1503,13 @@ export type Database = {
       salvar_orcamento: {
         Args: { _dados: Json; _itens: Json; _orcamento_id: string }
         Returns: {
+          ano_fabricacao_modelo: string | null
+          chassi: string | null
+          cilindrada: string | null
+          cliente_bairro_cidade: string | null
           cliente_cpf: string | null
+          cliente_email: string | null
+          cliente_endereco: string | null
           cliente_nome: string | null
           cliente_telefone: string | null
           cor: string | null
@@ -1190,12 +1523,16 @@ export type Database = {
           numero: number
           observacao: string | null
           os_id: string | null
+          pagamento_pix: boolean
           placa: string | null
+          placa_anterior: string | null
           status: string
           subtotal_mao_de_obra: number
           subtotal_pecas: number
+          subtotal_pneus: number
           total: number
           updated_at: string
+          veiculo_especie_tipo: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1231,12 +1568,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1260,11 +1597,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1285,11 +1622,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1310,11 +1647,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1327,11 +1664,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
