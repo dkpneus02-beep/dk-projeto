@@ -187,3 +187,12 @@ A configuração inicial foi criada com **0,00%**. Isso foi intencional para que
 O Supabase confirmou a existência da configuração inicial, com percentual de 0,00%, zero lançamentos indevidos e zero divergências entre a base, o percentual e o custo total arredondado para centavos. O `npm run build` terminou com sucesso após a inclusão da nova tela, dos tipos TypeScript e da migração.
 
 A etapa foi implementada sem criar dados reais de teste e sem alterar OS existentes. Nenhum deploy foi realizado.
+
+
+## Revisão técnica posterior — ciclo de reabertura e refinalização
+
+Durante uma revisão completa foi identificado e corrigido um caso de consistência: depois de reabrir uma OS e finalizá-la novamente, o sistema poderia encontrar o consumo antigo de mão de obra e deixar de registrar o novo consumo. A mesma função também poderia gerar estorno duplicado se fosse chamada repetidamente.
+
+Foi criada e aplicada a migração `supabase/migrations/20260923172000_corrige_ciclo_mao_obra.sql`. A regra agora considera o último evento de cada serviço. Um consumo só é considerado ativo quando não existe estorno posterior. Assim, o ciclo consumo, estorno e novo consumo pode ser repetido sem perder custo e sem duplicar lançamentos.
+
+A revisão também confirmou `npm run build` e `git diff --check`. O lint foi executado separadamente para verificar problemas estáticos adicionais. Nenhum deploy foi realizado.
