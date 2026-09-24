@@ -1022,6 +1022,7 @@ function AtendimentoPage() {
         <FinalizarDialog
           atendimento={data}
           servicos={servicos}
+          pecas={pecas ?? []}
           mecanicos={mecanicos ?? []}
           onClose={() => setFinalizando(false)}
           onDone={(resultado) => {
@@ -1426,11 +1427,17 @@ type Servico = {
   id: string;
   nome: string;
   valor: number;
+  preco_peca?: number;
   mecanico_id: string | null;
   peca_id: string | null;
   quantidade: number;
   retorno_meses: number;
   garantia_km: number | null;
+};
+
+type PecaDescontoPix = {
+  id: string;
+  aceita_desconto_pix: boolean;
 };
 
 function FinalizarDialog({
@@ -1450,6 +1457,7 @@ function FinalizarDialog({
     km: number | null;
   };
   servicos: Servico[];
+  pecas: PecaDescontoPix[];
   mecanicos: { id: string; nome: string }[];
   onClose: () => void;
   onDone: (resultado: {
@@ -1460,11 +1468,20 @@ function FinalizarDialog({
   }) => void;
 }) {
   const bruto = servicos.reduce((s, x) => s + Number(x.valor), 0);
-  const [desconto, setDesconto] = useState(0);
-  const liquido = Math.max(bruto - desconto, 0);
   const [pagamentos, setPagamentos] = useState([
-    { forma: "Dinheiro", valor: liquido, parcelas: 1 },
+    { forma: "Dinheiro", valor: bruto, parcelas: 1 },
   ]);
+  const pecasElegiveis = servicos
+    .filter((servico) => servico.peca_id && pecas.find((peca) => peca.id === servico.peca_id)?.aceita_desconto_pix)
+    .reduce((s, servico) => s + Number(servico.preco_peca ?? 0), 0);
+  const pagamentoPix = pagamentos.length > 0 && pagamentos.every((pagamento) => pagamento.forma === "PIX");
+  const desconto = pagamentoPix ? Math.round(pecasElegiveis * 0.25 * 100) / 100 : 0;
+  const liquido = Math.max(bruto - desconto, 0);
+  useEffect(() => {
+    if (pagamentos.length === 1 && pagamentos[0].valor !== liquido) {
+      setPagamentos((atual) => [{ ...atual[0], valor: liquido }]);
+    }
+  }, [liquido, pagamentos]);
   const somaPag = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
   const ok = Math.abs(somaPag - liquido) < 0.01;
 
@@ -1487,12 +1504,18 @@ function FinalizarDialog({
         _data_retorno_manual: necessitaRetorno && dataRetorno ? dataRetorno : null,
       });
       if (error) throw error;
-      const retorno = resultado as { garantia_ate?: string | null } | null;
-      return { garantiaAteStr: retorno?.garantia_ate ?? null };
+      const retorno = resultado as
+        | { garantia_ate?: string | null; desconto?: number; total?: number }
+        | null;
+      return {
+        garantiaAteStr: retorno?.garantia_ate ?? null,
+        desconto: Number(retorno?.desconto ?? desconto),
+        total: Number(retorno?.total ?? liquido),
+      };
     },
-    onSuccess: ({ garantiaAteStr }) => {
+    onSuccess: ({ garantiaAteStr, desconto: descontoFinal, total: totalFinal }) => {
       toast.success("Atendimento finalizado e registrado no caixa");
-      onDone({ desconto, total: liquido, garantia_ate: garantiaAteStr, pagamentos });
+      onDone({ desconto: descontoFinal, total: totalFinal, garantia_ate: garantiaAteStr, pagamentos });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -1536,14 +1559,11 @@ function FinalizarDialog({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label>Desconto</Label>
-            <Input
-              type="number"
-              step="0.01"
-              className="num"
-              value={desconto}
-              onChange={(e) => setDesconto(Number(e.target.value) || 0)}
-            />
+            <Label>Desconto Pix automático</Label>
+            <p className="num font-semibold">{brl(desconto)}</p>
+            <p className="text-xs text-muted-foreground">
+              25% somente nas peças elegíveis e apenas quando todos os pagamentos forem Pix.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Valor final</Label>

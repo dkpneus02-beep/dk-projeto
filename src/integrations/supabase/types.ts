@@ -71,6 +71,36 @@ export type Database = {
         }
         Relationships: []
       }
+      peca_lotes: {
+        Row: {
+          criado_em: string
+          custo_unitario: number
+          id: string
+          origem: string
+          peca_id: string
+          quantidade_inicial: number
+          quantidade_saldo: number
+        }
+        Insert: {
+          criado_em?: string
+          custo_unitario: number
+          id?: string
+          origem?: string
+          peca_id: string
+          quantidade_inicial: number
+          quantidade_saldo: number
+        }
+        Update: {
+          criado_em?: string
+          custo_unitario?: number
+          id?: string
+          origem?: string
+          peca_id?: string
+          quantidade_inicial?: number
+          quantidade_saldo?: number
+        }
+        Relationships: []
+      }
       atendimento_pecas_cmv: {
         Row: {
           atendimento_id: string
@@ -1414,6 +1444,39 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adicionar_entrada_estoque_com_custo: {
+        Args: { _peca_id: string; _preco_custo: number; _quantidade: number }
+        Returns: {
+          aceita_desconto_pix: boolean
+          aplicacao: string | null
+          categoria: string
+          construcao: string | null
+          created_at: string
+          deleted_at: string | null
+          estoque: number
+          estoque_minimo: number
+          id: string
+          indice_carga: string | null
+          marca: string | null
+          margem: number
+          medida: string | null
+          modelo_desenho: string | null
+          nome: string
+          observacoes: string | null
+          preco_custo: number
+          preco_venda: number
+          simbolo_velocidade: string | null
+          sku: string | null
+          tipo: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pecas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       adicionar_entrada_estoque: {
         Args: { _peca_id: string; _quantidade: number }
         Returns: {

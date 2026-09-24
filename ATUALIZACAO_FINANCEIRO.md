@@ -196,3 +196,24 @@ Durante uma revisão completa foi identificado e corrigido um caso de consistên
 Foi criada e aplicada a migração `supabase/migrations/20260923172000_corrige_ciclo_mao_obra.sql`. A regra agora considera o último evento de cada serviço. Um consumo só é considerado ativo quando não existe estorno posterior. Assim, o ciclo consumo, estorno e novo consumo pode ser repetido sem perder custo e sem duplicar lançamentos.
 
 A revisão também confirmou `npm run build` e `git diff --check`. O lint foi executado separadamente para verificar problemas estáticos adicionais. Nenhum deploy foi realizado.
+
+
+## Oitava etapa — lotes e custo médio ponderado de estoque
+
+Foi criada e aplicada a migração `supabase/migrations/20260924110000_lotes_custo_medio_estoque.sql`. A tabela `peca_lotes` preserva quantidade inicial, saldo, custo unitário, origem e data de cada lote. Os saldos atuais foram convertidos em lotes iniciais sem alterar a quantidade disponível.
+
+A entrada rápida de estoque agora exige quantidade e custo unitário. O sistema cria um lote e recalcula `pecas.preco_custo` pelo custo médio ponderado. O custo médio é arredondado para duas casas e permanece separado do preço de venda.
+
+A baixa de uma OS consome os lotes mais antigos disponíveis. O estorno devolve a quantidade em um novo lote com o custo histórico do consumo. A migração `supabase/migrations/20260924111000_integrar_lotes_baixa_os.sql` conectou esse controle às funções transacionais de consumo e reabertura.
+
+A conferência no banco encontrou uma tabela de lotes, quatro funções esperadas, zero saldos negativos, zero custos negativos e nenhuma divergência entre a soma dos saldos dos lotes e o estoque atual das peças.
+
+## Nona etapa — desconto Pix na finalização da OS
+
+A função `finalizar_atendimento_transacional` foi substituída pela migração `supabase/migrations/20260924100000_desconto_pix_finalizacao_os.sql`. A finalização agora usa a mesma regra do orçamento: aplica 25% somente sobre peças cujo cadastro permite desconto Pix e somente quando todos os pagamentos são Pix. Pneus e itens não elegíveis ficam fora do desconto. Mão de obra nunca recebe esse desconto.
+
+O cálculo é autoritativo no banco. O valor recebido, o desconto salvo na OS, os pagamentos e as entradas no Caixa usam o mesmo total final. O parâmetro de desconto enviado pelo frontend foi mantido apenas para compatibilidade com chamadas antigas e não consegue mais gerar desconto manual indevido.
+
+A tela de finalização deixou de aceitar desconto livre. Ela mostra o desconto Pix automático, recalcula o pagamento único quando a forma muda para Pix e usa o total efetivamente retornado pelo banco no recibo.
+
+O build e a checagem de whitespace passaram após as duas implementações. Nenhum deploy foi realizado.

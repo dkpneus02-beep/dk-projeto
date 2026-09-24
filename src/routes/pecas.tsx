@@ -108,6 +108,7 @@ function Pecas() {
   const [entradaOpen, setEntradaOpen] = useState(false);
   const [entradaPecaId, setEntradaPecaId] = useState("");
   const [entradaQuantidade, setEntradaQuantidade] = useState(1);
+  const [entradaCusto, setEntradaCusto] = useState(0);
   const [favoritos, setFavoritos] = useState<string[]>([]);
 
   useEffect(() => {
@@ -356,9 +357,10 @@ function Pecas() {
       if (!entradaPecaId || entradaQuantidade <= 0) {
         throw new Error("Informe o item e uma quantidade maior que zero.");
       }
-      const { data: item, error } = await supabase.rpc("adicionar_entrada_estoque", {
+      const { data: item, error } = await supabase.rpc("adicionar_entrada_estoque_com_custo", {
         _peca_id: entradaPecaId,
         _quantidade: entradaQuantidade,
+        _preco_custo: Math.round(entradaCusto * 100) / 100,
       });
       if (error) throw error;
       return item;
@@ -368,6 +370,7 @@ function Pecas() {
       setEntradaOpen(false);
       setEntradaPecaId("");
       setEntradaQuantidade(1);
+      setEntradaCusto(0);
       void qc.invalidateQueries({ queryKey: ["pecas"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -568,15 +571,20 @@ function Pecas() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Escolha o item, informe a quantidade recebida e o sistema somará ao saldo atual sem
-            alterar preço ou cadastro.
+            Escolha o item, informe quantidade e custo da entrada. O saldo e o custo médio serão
+            atualizados e o lote ficará preservado.
           </p>
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Item do estoque</Label>
               <select
                 value={entradaPecaId}
-                onChange={(event) => setEntradaPecaId(event.target.value)}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  setEntradaPecaId(id);
+                  const peca = (data ?? []).find((item) => item.id === id);
+                  setEntradaCusto(Number(peca?.preco_custo ?? 0));
+                }}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="">Selecione uma peça ou pneu</option>
@@ -598,6 +606,20 @@ function Pecas() {
                 onChange={(event) => setEntradaQuantidade(Number(event.target.value) || 0)}
                 className="num"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Custo unitário da entrada (R$)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={entradaCusto}
+                onChange={(event) => setEntradaCusto(Number(event.target.value) || 0)}
+                className="num"
+              />
+              <p className="text-xs text-muted-foreground">
+                O sistema criará um lote e recalculará o custo médio ponderado do item.
+              </p>
             </div>
           </div>
           <DialogFooter>
