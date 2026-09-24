@@ -42,7 +42,9 @@ function Historico() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("atendimentos")
-        .select("*, atendimento_servicos(nome, valor, peca_id, quantidade, pecas(nome)), pagamentos(forma, valor, parcelas)")
+        .select(
+          "*, atendimento_servicos(nome, valor, peca_id, quantidade, pecas(nome)), pagamentos(forma, valor, parcelas)",
+        )
         .is("deleted_at", null)
         .order("entrada_at", { ascending: false })
         .limit(500);
@@ -79,7 +81,9 @@ function Historico() {
     mutationFn: async (id: string) => {
       // Reabre o atendimento em uma única transação: caixa, pagamentos,
       // estorno de estoque e status são revertidos juntos.
-      const { error } = await supabase.rpc("reabrir_atendimento_transacional", { _atendimento_id: id });
+      const { error } = await supabase.rpc("reabrir_atendimento_transacional", {
+        _atendimento_id: id,
+      });
       if (error) throw error;
     },
     onSuccess: (_v, id) => {
@@ -157,7 +161,11 @@ function Historico() {
               return (
                 <tr key={a.id} className="border-b last:border-0 hover:bg-muted/40">
                   <td className="num p-3">
-                    <Link to="/atendimento/$id" params={{ id: a.id }} className="font-medium hover:underline">
+                    <Link
+                      to="/atendimento/$id"
+                      params={{ id: a.id }}
+                      className="font-medium hover:underline"
+                    >
                       #{a.numero}
                     </Link>
                   </td>
@@ -171,7 +179,10 @@ function Historico() {
                   <td className="p-3 text-muted-foreground">
                     {(a.atendimento_servicos ?? [])
                       .map((s) => {
-                        const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number };
+                        const item = s as typeof s & {
+                          pecas?: { nome: string } | null;
+                          quantidade?: number;
+                        };
                         return item.pecas?.nome
                           ? `${s.nome} · ${item.pecas.nome}${item.quantidade && item.quantidade !== 1 ? ` x${item.quantidade}` : ""}`
                           : s.nome;
@@ -213,9 +224,14 @@ function Historico() {
                                   garantia_ate: a.garantia_ate,
                                 },
                                 (a.atendimento_servicos ?? []).map((s) => {
-                                  const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number };
+                                  const item = s as typeof s & {
+                                    pecas?: { nome: string } | null;
+                                    quantidade?: number;
+                                  };
                                   return {
-                                    nome: item.pecas?.nome ? `${s.nome} · ${item.pecas.nome}` : s.nome,
+                                    nome: item.pecas?.nome
+                                      ? `${s.nome} · ${item.pecas.nome}`
+                                      : s.nome,
                                     valor: Number(s.valor),
                                     quantidade: Number(item.quantidade ?? 1),
                                   };
@@ -248,9 +264,9 @@ function Historico() {
                             description={
                               <>
                                 A OS #{a.numero} volta para "Carros no pátio" com todos os dados
-                                liberados para alteração. Os pagamentos já registrados e o lançamento
-                                no caixa desta OS serão removidos — ao finalizar de novo, um novo
-                                recibo é gerado.
+                                liberados para alteração. Os pagamentos já registrados e o
+                                lançamento no caixa desta OS serão removidos — ao finalizar de novo,
+                                um novo recibo é gerado.
                               </>
                             }
                             confirmLabel="Desfinalizar"
@@ -272,8 +288,8 @@ function Historico() {
                           description={
                             <>
                               Tem certeza que deseja excluir a OS #{a.numero} de{" "}
-                              <strong className="text-foreground">{a.cliente_nome}</strong>? Essa ação
-                              remove o registro do histórico.
+                              <strong className="text-foreground">{a.cliente_nome}</strong>? Essa
+                              ação remove o registro do histórico.
                             </>
                           }
                           confirmLabel="Excluir"

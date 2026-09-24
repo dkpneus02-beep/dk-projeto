@@ -91,10 +91,7 @@ function Patio() {
               <dl className="mt-4 space-y-1 text-sm">
                 <Row label="Cliente" value={c.cliente_nome} />
                 <Row label="Entrada" value={dt(c.entrada_at)} />
-                <Row
-                  label="Serviços"
-                  value={`${concluidos}/${servicos.length} concluídos`}
-                />
+                <Row label="Serviços" value={`${concluidos}/${servicos.length} concluídos`} />
                 <Row label="Total" value={brl(total)} strong />
               </dl>
               <p className="mt-3 text-xs text-muted-foreground">OS #{c.numero}</p>

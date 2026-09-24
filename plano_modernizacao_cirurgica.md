@@ -38,16 +38,16 @@ A Dashboard deixará de mostrar apenas “hoje” e passará a usar um período 
 
 A estrutura visual será inspirada na referência fornecida, sem copiar identidade de terceiros. O topo terá filtros de início, fim, mês atual, hoje e busca. Os indicadores planejados são:
 
-| Indicador | Regra |
-|---|---|
-| Faturamento bruto | Soma dos valores finalizados no período. |
-| Receita líquida | Faturamento menos descontos e taxas cadastradas, quando existirem. |
-| Custo de peças/pneus | Soma do custo registrado para itens consumidos. |
-| Lucro bruto | Receita líquida menos custo dos itens. |
-| OS finalizadas | Quantidade de OS finalizadas no período. |
-| Ticket médio | Receita dividida pela quantidade de OS finalizadas. |
-| Itens vendidos/consumidos | Soma das quantidades de peças e pneus. |
-| Retornos pendentes | Pendências no período, separando vencidos e futuros. |
+| Indicador                 | Regra                                                              |
+| ------------------------- | ------------------------------------------------------------------ |
+| Faturamento bruto         | Soma dos valores finalizados no período.                           |
+| Receita líquida           | Faturamento menos descontos e taxas cadastradas, quando existirem. |
+| Custo de peças/pneus      | Soma do custo registrado para itens consumidos.                    |
+| Lucro bruto               | Receita líquida menos custo dos itens.                             |
+| OS finalizadas            | Quantidade de OS finalizadas no período.                           |
+| Ticket médio              | Receita dividida pela quantidade de OS finalizadas.                |
+| Itens vendidos/consumidos | Soma das quantidades de peças e pneus.                             |
+| Retornos pendentes        | Pendências no período, separando vencidos e futuros.               |
 
 Os gráficos planejados são vendas por dia do período, formas de pagamento, faturamento por serviço/mecânico, produtos mais usados e comparação entre receita, custo e lucro. Os dados devem ser filtrados por `deleted_at IS NULL`, e relatórios grandes devem usar paginação ou agregação no banco, não carregar tudo no navegador.
 

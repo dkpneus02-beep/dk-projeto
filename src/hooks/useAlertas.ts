@@ -26,9 +26,17 @@ export function useAlertas() {
 
     const notificar = (titulo: string, corpo: string) => {
       toast(titulo, { description: corpo });
-      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      if (
+        typeof window !== "undefined" &&
+        "Notification" in window &&
+        Notification.permission === "granted"
+      ) {
         try {
-          new Notification(titulo, { body: corpo, tag: titulo, renotify: true } as NotificationOptions);
+          new Notification(titulo, {
+            body: corpo,
+            tag: titulo,
+            renotify: true,
+          } as NotificationOptions);
         } catch {
           /* ignora navegadores sem suporte */
         }
@@ -65,16 +73,28 @@ export function useAlertas() {
         void qc.invalidateQueries({ queryKey: ["atendimento"] });
       };
 
-      for (const tabela of ["atendimentos", "atendimento_servicos", "notificacoes_internas"] as const) {
+      for (const tabela of [
+        "atendimentos",
+        "atendimento_servicos",
+        "notificacoes_internas",
+      ] as const) {
         channel.on(
           "postgres_changes",
           { event: "*", schema: "public", table: tabela },
           (payload) => {
             invalidar(tabela);
             if (role === "gerente" && tabela === "atendimentos") {
-              const novo = payload.new as { status?: string; placa?: string; cliente_nome?: string };
+              const novo = payload.new as {
+                status?: string;
+                placa?: string;
+                cliente_nome?: string;
+              };
               const antigo = payload.old as { status?: string };
-              if (payload.eventType === "UPDATE" && novo.status === "aguardando_gerente" && antigo.status !== "aguardando_gerente") {
+              if (
+                payload.eventType === "UPDATE" &&
+                novo.status === "aguardando_gerente" &&
+                antigo.status !== "aguardando_gerente"
+              ) {
                 notificar(
                   "Carro pronto para finalizar",
                   `${novo.placa ?? ""} — ${novo.cliente_nome ?? "cliente"} está aguardando finalização.`,
@@ -84,15 +104,26 @@ export function useAlertas() {
             if (role === "gerente" && tabela === "atendimento_servicos") {
               const novo = payload.new as { status?: string; nome?: string };
               const antigo = payload.old as { status?: string };
-              if (payload.eventType === "UPDATE" && novo.status === "concluido" && antigo.status !== "concluido") {
+              if (
+                payload.eventType === "UPDATE" &&
+                novo.status === "concluido" &&
+                antigo.status !== "concluido"
+              ) {
                 notificar("Serviço concluído", `"${novo.nome ?? "Item"}" foi marcado como feito.`);
               }
             }
             if (role === "mecanico" && tabela === "atendimento_servicos" && mecanicoId) {
               const novo = payload.new as { nome?: string; mecanico_id?: string | null };
               const antigo = payload.old as { mecanico_id?: string | null };
-              if (payload.eventType === "UPDATE" && novo.mecanico_id === mecanicoId && antigo.mecanico_id !== mecanicoId) {
-                notificar("Novo serviço atribuído a você", novo.nome ?? "Confira seus atendimentos.");
+              if (
+                payload.eventType === "UPDATE" &&
+                novo.mecanico_id === mecanicoId &&
+                antigo.mecanico_id !== mecanicoId
+              ) {
+                notificar(
+                  "Novo serviço atribuído a você",
+                  novo.nome ?? "Confira seus atendimentos.",
+                );
               }
             }
           },
@@ -114,7 +145,7 @@ export function useAlertas() {
       cancelado = true;
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [user, role]);
+  }, [qc, user, role]);
 
   useEffect(() => {
     if (!user) return;
@@ -123,7 +154,11 @@ export function useAlertas() {
     const notificar = (titulo: string, corpo: string) => {
       if (Notification.permission !== "granted") return;
       try {
-        new Notification(titulo, { body: corpo, tag: titulo, renotify: true } as NotificationOptions);
+        new Notification(titulo, {
+          body: corpo,
+          tag: titulo,
+          renotify: true,
+        } as NotificationOptions);
       } catch {
         /* ignora navegadores sem suporte */
       }
@@ -151,7 +186,10 @@ export function useAlertas() {
           (s) => (s.atendimentos as { status: string } | null)?.status === "aberto",
         );
         const hoje = agora.toISOString().slice(0, 10);
-        const chaveFechamento = `${hoje}:${pendentes.map((p) => p.id).sort().join(",")}`;
+        const chaveFechamento = `${hoje}:${pendentes
+          .map((p) => p.id)
+          .sort()
+          .join(",")}`;
         if (pendentes.length && chaveFechamento !== ultimoFechamento.current) {
           ultimoFechamento.current = chaveFechamento;
           const placas = [
@@ -181,7 +219,6 @@ export function useAlertas() {
             `${data.length} cliente(s) para contatar. Ex.: ${primeiro.cliente_nome} (${primeiro.veiculo ?? ""}) — ${primeiro.servico}.`,
           );
         }
-
       }
     };
 
@@ -193,7 +230,7 @@ export function useAlertas() {
       window.clearInterval(id);
       window.removeEventListener("dk-notificacoes-permissao", permissionEvent);
     };
-  }, [user, role, nome]);
+  }, [qc, user, role, nome]);
 }
 
 export async function pedirPermissaoNotificacoes() {

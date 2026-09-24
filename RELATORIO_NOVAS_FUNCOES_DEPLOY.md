@@ -71,17 +71,17 @@ A implementação atual captura o custo cadastrado no momento do consumo. Custo 
 
 ## 8. Validações realizadas
 
-| Validação | Resultado |
-|---|---|
-| `npm run build` | Aprovado na verificação final |
-| `git diff --check` | Aprovado |
-| Precisão de parcelas | Conferida com valores de centavos e diferenças na última parcela |
-| Pagamento integrado ao Caixa | Conferido com entrada temporária de R$ 0,01 |
-| Recorrência | Idempotência conferida sem duplicação |
-| Alertas | Atrasados e próximos vencimentos conferidos sem duplicação |
-| CMV | 7 lançamentos conferidos, sem divergência de centavos |
-| RLS e acesso | Livro-razão de CMV restrito ao gerente |
-| Deploy Netlify | Não realizado |
+| Validação                    | Resultado                                                        |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `npm run build`              | Aprovado na verificação final                                    |
+| `git diff --check`           | Aprovado                                                         |
+| Precisão de parcelas         | Conferida com valores de centavos e diferenças na última parcela |
+| Pagamento integrado ao Caixa | Conferido com entrada temporária de R$ 0,01                      |
+| Recorrência                  | Idempotência conferida sem duplicação                            |
+| Alertas                      | Atrasados e próximos vencimentos conferidos sem duplicação       |
+| CMV                          | 7 lançamentos conferidos, sem divergência de centavos            |
+| RLS e acesso                 | Livro-razão de CMV restrito ao gerente                           |
+| Deploy Netlify               | Não realizado                                                    |
 
 Na conferência do CMV, foram encontrados 7 consumos, nenhuma divergência entre custo unitário, quantidade e custo total e nenhum tipo inválido. O total líquido conferido foi de R$ 2.588,72.
 

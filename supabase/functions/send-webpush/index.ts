@@ -36,7 +36,8 @@ Deno.serve(async (request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) return json({ error: "Configuração server-side ausente" }, 500);
+  if (!supabaseUrl || !serviceRoleKey)
+    return json({ error: "Configuração server-side ausente" }, 500);
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -47,7 +48,8 @@ Deno.serve(async (request) => {
   if (configError || !config) return json({ error: "Configuração Web Push indisponível" }, 500);
 
   const providedSecret = request.headers.get("x-webpush-secret");
-  if (!providedSecret || providedSecret !== config.trigger_secret) return json({ error: "Não autorizado" }, 401);
+  if (!providedSecret || providedSecret !== config.trigger_secret)
+    return json({ error: "Não autorizado" }, 401);
 
   let body: { notification_id?: string };
   try {
@@ -105,14 +107,21 @@ Deno.serve(async (request) => {
         },
       );
       sent += 1;
-      await supabase.from("webpush_subscriptions").update({ ultimo_envio_at: new Date().toISOString(), ultimo_erro_at: null }).eq("id", subscription.id);
+      await supabase
+        .from("webpush_subscriptions")
+        .update({ ultimo_envio_at: new Date().toISOString(), ultimo_erro_at: null })
+        .eq("id", subscription.id);
     } catch (error) {
-      const statusCode = typeof error === "object" && error !== null && "statusCode" in error
-        ? Number((error as { statusCode?: number }).statusCode)
-        : 0;
+      const statusCode =
+        typeof error === "object" && error !== null && "statusCode" in error
+          ? Number((error as { statusCode?: number }).statusCode)
+          : 0;
       if (statusCode === 404 || statusCode === 410) {
         invalid += 1;
-        await supabase.from("webpush_subscriptions").update({ ativo: false, ultimo_erro_at: new Date().toISOString() }).eq("id", subscription.id);
+        await supabase
+          .from("webpush_subscriptions")
+          .update({ ativo: false, ultimo_erro_at: new Date().toISOString() })
+          .eq("id", subscription.id);
       }
     }
   }

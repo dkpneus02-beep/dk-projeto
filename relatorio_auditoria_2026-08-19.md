@@ -16,14 +16,14 @@ O segundo ponto urgente é a finalização financeira da OS. A tela grava a OS c
 
 ## 2. Resultado das validações técnicas
 
-| Verificação | Resultado | Interpretação |
-|---|---:|---|
-| `npm run build` | Passou | O pacote continua compilável. |
-| `npm audit --omit=dev` | 0 vulnerabilidades | Não foram encontradas vulnerabilidades conhecidas nas dependências de produção. |
-| `npx eslint src` | 1.228 problemas | 1.219 erros e 9 avisos, principalmente formatação Prettier. Não executei correção automática. |
-| Rotas públicas testadas por HTTP | HTTP 200 | O site público responde nas rotas principais; isso não substitui o teste autenticado. |
-| Tamanho do banco | Baixo | `audit_eventos` é a maior tabela, com aproximadamente 608 kB. |
-| Eventos de auditoria | 407 | Eventos entre 18 e 19 de agosto de 2026; ainda não há pressão de espaço, mas não foi observada retenção automática. |
+| Verificação                      |          Resultado | Interpretação                                                                                                       |
+| -------------------------------- | -----------------: | ------------------------------------------------------------------------------------------------------------------- |
+| `npm run build`                  |             Passou | O pacote continua compilável.                                                                                       |
+| `npm audit --omit=dev`           | 0 vulnerabilidades | Não foram encontradas vulnerabilidades conhecidas nas dependências de produção.                                     |
+| `npx eslint src`                 |    1.228 problemas | 1.219 erros e 9 avisos, principalmente formatação Prettier. Não executei correção automática.                       |
+| Rotas públicas testadas por HTTP |           HTTP 200 | O site público responde nas rotas principais; isso não substitui o teste autenticado.                               |
+| Tamanho do banco                 |              Baixo | `audit_eventos` é a maior tabela, com aproximadamente 608 kB.                                                       |
+| Eventos de auditoria             |                407 | Eventos entre 18 e 19 de agosto de 2026; ainda não há pressão de espaço, mas não foi observada retenção automática. |
 
 O lint não indica necessariamente falha funcional, mas revela dívida técnica importante. O comando configurado como `npm run lint` também ficou preso ao percorrer artefatos gerados pelo build; a validação útil foi executada diretamente sobre `src`.
 
@@ -76,13 +76,13 @@ O trigger de finalização também pode baixar peças do estoque. Como não exis
 
 A consulta somente leitura encontrou o seguinte:
 
-| Verificação | Quantidade | Observação |
-|---|---:|---|
-| Serviços sem OS pai | 0 | Não há órfãos desse tipo. |
-| Serviços em OS logicamente excluída | 25 | Podem ser históricos legítimos, mas precisam continuar invisíveis junto com a OS. |
-| Pagamentos sem OS pai | 0 | Não foram encontrados pagamentos órfãos. |
-| Notificações ligadas a OS excluída | 0 | Os guards de notificações estão funcionando para esse caso. |
-| Serviços atribuídos a mecânico excluído | 1 | Precisa ser revisado para confirmar se é histórico ou referência que deve ser limpa. |
+| Verificação                             | Quantidade | Observação                                                                           |
+| --------------------------------------- | ---------: | ------------------------------------------------------------------------------------ |
+| Serviços sem OS pai                     |          0 | Não há órfãos desse tipo.                                                            |
+| Serviços em OS logicamente excluída     |         25 | Podem ser históricos legítimos, mas precisam continuar invisíveis junto com a OS.    |
+| Pagamentos sem OS pai                   |          0 | Não foram encontrados pagamentos órfãos.                                             |
+| Notificações ligadas a OS excluída      |          0 | Os guards de notificações estão funcionando para esse caso.                          |
+| Serviços atribuídos a mecânico excluído |          1 | Precisa ser revisado para confirmar se é histórico ou referência que deve ser limpa. |
 
 Os 25 serviços em OS excluídas não devem ser apagados automaticamente sem confirmar a política de histórico e estoque. O importante é impedir que eles apareçam em dashboard, notificações, relatórios, histórico operacional ou consultas de detalhe.
 
@@ -128,16 +128,16 @@ As fotos não aparecem como o maior consumo nas tabelas porque ficam no Storage.
 
 ## 11. Ordem recomendada de correção
 
-| Ordem | Trabalho | Motivo |
-|---:|---|---|
-| 1 | Remover policies RLS permissivas antigas de mecânicos e corrigir `atendimentos_update` | Fecha a maior brecha de autorização. |
-| 2 | Corrigir visibilidade de OS apagada e revisar referências históricas | Garante que exclusão lógica seja respeitada em toda a aplicação. |
-| 3 | Criar RPC transacional de finalização | Protege caixa, pagamentos, estoque e garantia contra estados parciais. |
-| 4 | Revisar o mecânico atribuído a OS excluída | Resolve a inconsistência encontrada sem apagar histórico automaticamente. |
-| 5 | Corrigir repetição de alertas e filtros de OS ativa | Remove a notificação infinita e reduz ruído. |
-| 6 | Melhorar backup e arquivamento | Protege garantias futuras e evita perda de fotos/dados. |
-| 7 | Corrigir câmera de código e bundle | Melhora a operação no celular sem mexer na câmera da vistoria. |
-| 8 | Corrigir lint, paginação e carregamento | Reduz dívida técnica e melhora manutenção/desempenho. |
+| Ordem | Trabalho                                                                               | Motivo                                                                    |
+| ----: | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+|     1 | Remover policies RLS permissivas antigas de mecânicos e corrigir `atendimentos_update` | Fecha a maior brecha de autorização.                                      |
+|     2 | Corrigir visibilidade de OS apagada e revisar referências históricas                   | Garante que exclusão lógica seja respeitada em toda a aplicação.          |
+|     3 | Criar RPC transacional de finalização                                                  | Protege caixa, pagamentos, estoque e garantia contra estados parciais.    |
+|     4 | Revisar o mecânico atribuído a OS excluída                                             | Resolve a inconsistência encontrada sem apagar histórico automaticamente. |
+|     5 | Corrigir repetição de alertas e filtros de OS ativa                                    | Remove a notificação infinita e reduz ruído.                              |
+|     6 | Melhorar backup e arquivamento                                                         | Protege garantias futuras e evita perda de fotos/dados.                   |
+|     7 | Corrigir câmera de código e bundle                                                     | Melhora a operação no celular sem mexer na câmera da vistoria.            |
+|     8 | Corrigir lint, paginação e carregamento                                                | Reduz dívida técnica e melhora manutenção/desempenho.                     |
 
 ## Conclusão
 

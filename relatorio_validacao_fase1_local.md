@@ -12,14 +12,14 @@ A rota `src/routes/atendimento.$id.tsx` agora aplica explicitamente `.is("delete
 
 ## Testes executados
 
-| Verificação | Resultado |
-|---|---|
-| `npm run build` | **Aprovado**. O build Vite/Nitro concluiu e gerou os artefatos de saída. |
-| `git diff --check` | **Aprovado**, sem erros de espaços ou conflitos no diff. |
-| Estrutura da migration | **Aprovada na inspeção estrutural**: blocos `$$` balanceados, policies e triggers com pares de remoção/criação. |
-| Conferência de colunas usadas | **Aprovada**: as colunas financeiras e de exclusão lógica usadas pela migration existem nas migrations anteriores. |
-| `npm run lint` global | **Não concluído**: o comando percorreu artefatos gerados e ficou travado; foi encerrado sem alterar arquivos. |
-| ESLint direcionado | Encontrou **351 problemas preexistentes de Prettier**, concentrados no formato geral dos arquivos, sem erro de build TypeScript. Não foi executado `--fix` para evitar uma alteração massiva e não cirúrgica. |
+| Verificação                   | Resultado                                                                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run build`               | **Aprovado**. O build Vite/Nitro concluiu e gerou os artefatos de saída.                                                                                                                                      |
+| `git diff --check`            | **Aprovado**, sem erros de espaços ou conflitos no diff.                                                                                                                                                      |
+| Estrutura da migration        | **Aprovada na inspeção estrutural**: blocos `$$` balanceados, policies e triggers com pares de remoção/criação.                                                                                               |
+| Conferência de colunas usadas | **Aprovada**: as colunas financeiras e de exclusão lógica usadas pela migration existem nas migrations anteriores.                                                                                            |
+| `npm run lint` global         | **Não concluído**: o comando percorreu artefatos gerados e ficou travado; foi encerrado sem alterar arquivos.                                                                                                 |
+| ESLint direcionado            | Encontrou **351 problemas preexistentes de Prettier**, concentrados no formato geral dos arquivos, sem erro de build TypeScript. Não foi executado `--fix` para evitar uma alteração massiva e não cirúrgica. |
 
 ## Pendências antes da publicação única
 

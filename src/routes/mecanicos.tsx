@@ -135,7 +135,10 @@ function Mecanicos() {
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Nome</Label>
-                <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+                <Input
+                  value={form.nome}
+                  onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>E-mail</Label>
@@ -200,9 +203,10 @@ function Mecanicos() {
                 title="Remover mecânico"
                 description={
                   <>
-                    Tem certeza que deseja remover <strong className="text-foreground">{m.nome}</strong>{" "}
-                    da equipe? Ele deixa de aparecer para atribuição de serviços. O login não é
-                    excluído, apenas desativado aqui.
+                    Tem certeza que deseja remover{" "}
+                    <strong className="text-foreground">{m.nome}</strong> da equipe? Ele deixa de
+                    aparecer para atribuição de serviços. O login não é excluído, apenas desativado
+                    aqui.
                   </>
                 }
                 confirmLabel="Remover"

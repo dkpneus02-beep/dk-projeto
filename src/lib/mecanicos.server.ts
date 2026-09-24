@@ -65,13 +65,18 @@ export const criarMecanico = createServerFn({ method: "POST" })
       throw new Error("Já existe um mecânico com este nome. Informe outro nome.");
     }
     const registroPorTelefone = (registros ?? []).find(
-      (m) => m.id !== registroPorEmail?.id && normalizarTelefone(m.telefone ?? "") === telefoneNormalizado,
+      (m) =>
+        m.id !== registroPorEmail?.id &&
+        normalizarTelefone(m.telefone ?? "") === telefoneNormalizado,
     );
     if (registroPorTelefone) {
       throw new Error("Já existe um mecânico com este telefone. Informe outro número.");
     }
 
-    const { data: lista, error: listaErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const { data: lista, error: listaErr } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
     if (listaErr) throw new Error(listaErr.message);
     const usuarioExistente = lista.users.find((u) => u.email?.trim().toLowerCase() === email);
 
@@ -89,7 +94,13 @@ export const criarMecanico = createServerFn({ method: "POST" })
       if (registroExistente) {
         const { error: restaurarErr } = await supabaseAdmin
           .from("mecanicos")
-          .update({ nome: data.nome, telefone: data.telefone, email, ativo: true, deleted_at: null })
+          .update({
+            nome: data.nome,
+            telefone: data.telefone,
+            email,
+            ativo: true,
+            deleted_at: null,
+          })
           .eq("id", registroExistente.id);
         if (restaurarErr) throw new Error(restaurarErr.message);
         const { error: senhaErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -99,7 +110,9 @@ export const criarMecanico = createServerFn({ method: "POST" })
         if (senhaErr) throw new Error(senhaErr.message);
         return { id: userId };
       }
-      throw new Error("Este e-mail já pertence a uma conta sem cadastro de mecânico. Use outro e-mail.");
+      throw new Error(
+        "Este e-mail já pertence a uma conta sem cadastro de mecânico. Use outro e-mail.",
+      );
     }
 
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({

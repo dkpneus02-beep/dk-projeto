@@ -564,29 +564,29 @@ Revisar diff, migrações, permissões, cálculos, logs, PDF e comportamento vis
 
 Os seguintes casos devem ser testados:
 
-| Caso | Resultado esperado |
-|---|---|
-| Receita de R$ 0,01 | Valor preservado na OS, pagamento, caixa e relatório |
-| Despesa de R$ 0,01 | Valor preservado na parcela, pagamento e caixa |
+| Caso                             | Resultado esperado                                                          |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| Receita de R$ 0,01               | Valor preservado na OS, pagamento, caixa e relatório                        |
+| Despesa de R$ 0,01               | Valor preservado na parcela, pagamento e caixa                              |
 | Três parcelas com arredondamento | Soma das parcelas igual ao documento, com diferença explícita se necessário |
-| Pagamento parcial | Saldo restante correto e status parcialmente pago |
-| Pagamento duplicado | Sistema bloqueia ou sinaliza duplicidade |
-| Boleto atrasado | Aparece como atrasado sem mudar o valor original indevidamente |
-| Juros e multa | Custos adicionais separados do valor original |
-| Estorno | Cria movimento inverso e preserva o original |
-| Compra de estoque | Não vira CMV antes da venda ou consumo |
-| Consumo de peça em OS | CMV calculado com custo histórico |
-| Reabertura de OS | Consumo e CMV estornados corretamente |
-| Desconto Pix | Respeita as regras atuais e altera receita líquida corretamente |
-| Serviço sem peça | Usa custo de mão de obra configurado |
-| OS cancelada | Não entra como receita finalizada |
-| Orçamento não convertido | Não entra como receita nem consumo |
-| OS convertida de orçamento | Não duplica receita ou estoque |
-| Caixa fechado | Não aceita lançamento indevido |
-| Alteração de despesa | Mantém auditoria do valor anterior |
-| Exclusão lógica | Não apaga o histórico da DRE |
-| Filtro mensal | Não mistura competência com data de pagamento |
-| PDF | Soma os mesmos valores da tela, até R$ 0,01 |
+| Pagamento parcial                | Saldo restante correto e status parcialmente pago                           |
+| Pagamento duplicado              | Sistema bloqueia ou sinaliza duplicidade                                    |
+| Boleto atrasado                  | Aparece como atrasado sem mudar o valor original indevidamente              |
+| Juros e multa                    | Custos adicionais separados do valor original                               |
+| Estorno                          | Cria movimento inverso e preserva o original                                |
+| Compra de estoque                | Não vira CMV antes da venda ou consumo                                      |
+| Consumo de peça em OS            | CMV calculado com custo histórico                                           |
+| Reabertura de OS                 | Consumo e CMV estornados corretamente                                       |
+| Desconto Pix                     | Respeita as regras atuais e altera receita líquida corretamente             |
+| Serviço sem peça                 | Usa custo de mão de obra configurado                                        |
+| OS cancelada                     | Não entra como receita finalizada                                           |
+| Orçamento não convertido         | Não entra como receita nem consumo                                          |
+| OS convertida de orçamento       | Não duplica receita ou estoque                                              |
+| Caixa fechado                    | Não aceita lançamento indevido                                              |
+| Alteração de despesa             | Mantém auditoria do valor anterior                                          |
+| Exclusão lógica                  | Não apaga o histórico da DRE                                                |
+| Filtro mensal                    | Não mistura competência com data de pagamento                               |
+| PDF                              | Soma os mesmos valores da tela, até R$ 0,01                                 |
 
 ## 13. Perguntas que precisam ser respondidas antes da implementação
 

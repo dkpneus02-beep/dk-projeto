@@ -107,7 +107,11 @@ function Backup() {
     return (
       <AppShell>
         <PageHeader title="Backup" subtitle="Acesso restrito" />
-        <Card><CardContent className="p-6 text-sm text-muted-foreground">Somente o gerente pode exportar os dados da oficina.</CardContent></Card>
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            Somente o gerente pode exportar os dados da oficina.
+          </CardContent>
+        </Card>
       </AppShell>
     );
   }
@@ -115,7 +119,9 @@ function Backup() {
   const exportar = async () => {
     setExportando(true);
     try {
-      const entries = await Promise.all(TABELAS.map(async (tabela) => [tabela, await carregarTabela(tabela)] as const));
+      const entries = await Promise.all(
+        TABELAS.map(async (tabela) => [tabela, await carregarTabela(tabela)] as const),
+      );
       const geradoEm = new Date().toISOString();
       const payload: BackupPayload = {
         backup_version: 1,
@@ -129,7 +135,9 @@ function Backup() {
         },
         restore_order: ORDEM_RESTAURACAO,
       };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -147,7 +155,10 @@ function Backup() {
 
   return (
     <AppShell>
-      <PageHeader title="Backup e segurança" subtitle="Exportação manual dos dados operacionais da oficina" />
+      <PageHeader
+        title="Backup e segurança"
+        subtitle="Exportação manual dos dados operacionais da oficina"
+      />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card>
@@ -155,30 +166,58 @@ function Backup() {
             <div>
               <h2 className="font-display text-xl font-bold uppercase">Backup de dados</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Este export salva um snapshot dos dados que o gerente consegue consultar, incluindo OS, serviços, pagamentos, caixa, estoque, retornos, avisos, configurações e auditoria.
+                Este export salva um snapshot dos dados que o gerente consegue consultar, incluindo
+                OS, serviços, pagamentos, caixa, estoque, retornos, avisos, configurações e
+                auditoria.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {TABELAS.map((tabela) => <Badge key={tabela} variant="outline">{tabela}</Badge>)}
+              {TABELAS.map((tabela) => (
+                <Badge key={tabela} variant="outline">
+                  {tabela}
+                </Badge>
+              ))}
             </div>
             <div className="rounded-md border border-warning/40 bg-warning/10 p-4 text-sm">
               <p className="font-semibold">Importante</p>
-              <p className="mt-1 text-muted-foreground">Cada exportação é um retrato daquele momento. Ela não se atualiza sozinha. Faça um novo backup depois de mudanças importantes e guarde o arquivo em local seguro.</p>
+              <p className="mt-1 text-muted-foreground">
+                Cada exportação é um retrato daquele momento. Ela não se atualiza sozinha. Faça um
+                novo backup depois de mudanças importantes e guarde o arquivo em local seguro.
+              </p>
             </div>
             <Button onClick={exportar} disabled={exportando}>
-              {exportando ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-download" />}
+              {exportando ? (
+                <i className="fa-solid fa-circle-notch fa-spin" />
+              ) : (
+                <i className="fa-solid fa-download" />
+              )}
               {exportando ? "Gerando backup…" : "Exportar backup JSON"}
             </Button>
-            {ultimoBackup && <p className="text-xs text-muted-foreground">Último export nesta sessão: {new Date(ultimoBackup).toLocaleString("pt-BR")}</p>}
+            {ultimoBackup && (
+              <p className="text-xs text-muted-foreground">
+                Último export nesta sessão: {new Date(ultimoBackup).toLocaleString("pt-BR")}
+              </p>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="space-y-4 p-6 text-sm">
             <h2 className="font-display text-xl font-bold uppercase">Como guardar</h2>
-            <p className="text-muted-foreground">Baixe o arquivo e mantenha pelo menos duas cópias: uma no computador e outra em um armazenamento externo ou nuvem.</p>
-            <p className="text-muted-foreground">Não coloque o arquivo em repositório público. Ele contém dados de clientes, veículos e movimentações financeiras.</p>
-            <p className="text-muted-foreground">As fotos ficam no bucket privado <strong className="text-foreground">vistorias</strong>; o JSON preserva os registros e links associados, mas não expõe a chave de serviço nem tenta copiar arquivos privados pelo navegador.</p>
+            <p className="text-muted-foreground">
+              Baixe o arquivo e mantenha pelo menos duas cópias: uma no computador e outra em um
+              armazenamento externo ou nuvem.
+            </p>
+            <p className="text-muted-foreground">
+              Não coloque o arquivo em repositório público. Ele contém dados de clientes, veículos e
+              movimentações financeiras.
+            </p>
+            <p className="text-muted-foreground">
+              As fotos ficam no bucket privado{" "}
+              <strong className="text-foreground">vistorias</strong>; o JSON preserva os registros e
+              links associados, mas não expõe a chave de serviço nem tenta copiar arquivos privados
+              pelo navegador.
+            </p>
             <p className="text-xs text-muted-foreground">Exportado por: {nome || "gerente"}</p>
           </CardContent>
         </Card>

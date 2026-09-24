@@ -142,7 +142,6 @@ Foram criadas duas despesas temporárias: uma de R$ 4,56 vencida em 20/09/2026 e
 
 Ao final, foram removidas 2 despesas, 2 parcelas e 2 notificações temporárias. O preview e suas credenciais temporárias foram removidos. O build passou e nenhum deploy foi realizado.
 
-
 ## Sexta etapa — CMV histórico de peças e pneus
 
 Foi criada a migração `supabase/migrations/20260923170000_cmv_historico_pecas.sql` e aplicada no projeto Supabase. A tabela `atendimento_pecas_cmv` funciona como um livro-razão de custo. Cada consumo e cada estorno registra a OS, o serviço, a peça, a quantidade, o custo unitário capturado no evento, o custo total arredondado para centavos e o tipo do lançamento.
@@ -169,7 +168,6 @@ Também permanece pendente a inclusão de custo direto de mão de obra na margem
 
 A branch local continua sendo `feat/catalogo-pecas-referencias`, baseada em `feat/orcamentos-temporarios`. O Supabase recebeu a migração para viabilizar a validação funcional. O Netlify não recebeu deploy e continua aguardando autorização explícita.
 
-
 ## Sétima etapa — custo histórico de mão de obra
 
 Foi criada e aplicada a migração `supabase/migrations/20260923171000_custo_mao_obra_financeiro.sql`. O gerente agora pode configurar um percentual de custo direto da mão de obra entre 0% e 100%. Esse percentual é aplicado sobre o valor de mão de obra cobrado em cada serviço e não sobre o preço de peças.
@@ -188,7 +186,6 @@ O Supabase confirmou a existência da configuração inicial, com percentual de 
 
 A etapa foi implementada sem criar dados reais de teste e sem alterar OS existentes. Nenhum deploy foi realizado.
 
-
 ## Revisão técnica posterior — ciclo de reabertura e refinalização
 
 Durante uma revisão completa foi identificado e corrigido um caso de consistência: depois de reabrir uma OS e finalizá-la novamente, o sistema poderia encontrar o consumo antigo de mão de obra e deixar de registrar o novo consumo. A mesma função também poderia gerar estorno duplicado se fosse chamada repetidamente.
@@ -196,7 +193,6 @@ Durante uma revisão completa foi identificado e corrigido um caso de consistên
 Foi criada e aplicada a migração `supabase/migrations/20260923172000_corrige_ciclo_mao_obra.sql`. A regra agora considera o último evento de cada serviço. Um consumo só é considerado ativo quando não existe estorno posterior. Assim, o ciclo consumo, estorno e novo consumo pode ser repetido sem perder custo e sem duplicar lançamentos.
 
 A revisão também confirmou `npm run build` e `git diff --check`. O lint foi executado separadamente para verificar problemas estáticos adicionais. Nenhum deploy foi realizado.
-
 
 ## Oitava etapa — lotes e custo médio ponderado de estoque
 
@@ -217,3 +213,10 @@ O cálculo é autoritativo no banco. O valor recebido, o desconto salvo na OS, o
 A tela de finalização deixou de aceitar desconto livre. Ela mostra o desconto Pix automático, recalcula o pagamento único quando a forma muda para Pix e usa o total efetivamente retornado pelo banco no recibo.
 
 O build e a checagem de whitespace passaram após as duas implementações. Nenhum deploy foi realizado.
+
+
+## Revisão final de qualidade e preparação para deploy
+
+Foi executada a limpeza de formatação com Prettier em todo o projeto. Os casts `any` desnecessários nas telas de notificações foram removidos, e os avisos de dependência dos hooks de alertas e do painel inicial foram corrigidos. A revisão não encontrou novos erros semânticos.
+
+O lint final terminou com **0 erros** e apenas oito avisos de Fast Refresh em componentes compartilhados da biblioteca de UI e no hook de autenticação. Esses avisos não indicam falha de execução e não bloqueiam o build. O build de produção terminou com sucesso e `git diff --check` também passou. Nenhum deploy foi realizado.

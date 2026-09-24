@@ -126,11 +126,11 @@ Antes de concluir a implementação, será necessário confirmar apenas decisõe
 
 ## Histórico de atualização
 
-| Data | Etapa | Registro |
-|---|---|---|
-| 2026-09-23 | Baseline | Branch de trabalho criada a partir de `59dc325`. Documento inicial criado. |
-| 2026-09-23 | Banco, cadastro e catálogo | Migração local criada, tipos atualizados e cadastro/busca de referências implementados. Build e checagens individuais aprovados. Aplicação remota ainda pendente. |
-| 2026-09-23 | Atendimento e validação | Busca por referências integrada ao atendimento. Build, Prettier e `git diff --check` aprovados. Migração aplicada e catálogo/formulário validados no preview local autenticado. Foi criada uma OS temporária claramente marcada como teste, a seleção por referência foi validada e os dados foram removidos depois. |
+| Data       | Etapa                      | Registro                                                                                                                                                                                                                                                                                                             |
+| ---------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-23 | Baseline                   | Branch de trabalho criada a partir de `59dc325`. Documento inicial criado.                                                                                                                                                                                                                                           |
+| 2026-09-23 | Banco, cadastro e catálogo | Migração local criada, tipos atualizados e cadastro/busca de referências implementados. Build e checagens individuais aprovados. Aplicação remota ainda pendente.                                                                                                                                                    |
+| 2026-09-23 | Atendimento e validação    | Busca por referências integrada ao atendimento. Build, Prettier e `git diff --check` aprovados. Migração aplicada e catálogo/formulário validados no preview local autenticado. Foi criada uma OS temporária claramente marcada como teste, a seleção por referência foi validada e os dados foram removidos depois. |
 
 ## Referências
 

@@ -20,17 +20,39 @@ export const Route = createFileRoute("/relatorios")({
 
 type RelatorioData = {
   atendimentos: { id: string; numero: number; total: number; finalizado_at: string | null }[];
-  servicos: { atendimento_id: string; nome: string; valor: number; mecanico_id: string | null; peca_id: string | null; quantidade: number; created_at: string }[];
+  servicos: {
+    atendimento_id: string;
+    nome: string;
+    valor: number;
+    mecanico_id: string | null;
+    peca_id: string | null;
+    quantidade: number;
+    created_at: string;
+  }[];
   mecanicos: { id: string; nome: string }[];
-  pecas: { id: string; nome: string; estoque: number; estoque_minimo: number; deleted_at: string | null }[];
-  retornos: { id: string; cliente_nome: string; servico: string; vencimento: string; status: string }[];
+  pecas: {
+    id: string;
+    nome: string;
+    estoque: number;
+    estoque_minimo: number;
+    deleted_at: string | null;
+  }[];
+  retornos: {
+    id: string;
+    cliente_nome: string;
+    servico: string;
+    vencimento: string;
+    status: string;
+  }[];
 };
 
 function Relatorios() {
   const { role } = useAuth();
   const gerente = role === "gerente";
   const hoje = new Date();
-  const [inicio, setInicio] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10));
+  const [inicio, setInicio] = useState(
+    new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10),
+  );
   const [fim, setFim] = useState(hoje.toISOString().slice(0, 10));
 
   const { data, isLoading, error } = useQuery<RelatorioData>({
@@ -65,7 +87,9 @@ function Relatorios() {
           .limit(200),
       ]);
 
-      const falhaInicial = [atendimentos, mecanicos, pecas, retornos].find((resposta) => resposta.error)?.error;
+      const falhaInicial = [atendimentos, mecanicos, pecas, retornos].find(
+        (resposta) => resposta.error,
+      )?.error;
       if (falhaInicial) throw falhaInicial;
 
       const idsFinalizados = (atendimentos.data ?? []).map((atendimento) => atendimento.id);
@@ -95,8 +119,12 @@ function Relatorios() {
   const nomesPecas = new Map((data?.pecas ?? []).map((p) => [p.id, p.nome]));
 
   const finalizadosIds = new Set((data?.atendimentos ?? []).map((a) => a.id));
-  for (const servico of (data?.servicos ?? []).filter((item) => finalizadosIds.has(item.atendimento_id))) {
-    const nomeMecanico = servico.mecanico_id ? nomesMecanicos.get(servico.mecanico_id) ?? "Mecânico removido" : "Sem responsável";
+  for (const servico of (data?.servicos ?? []).filter((item) =>
+    finalizadosIds.has(item.atendimento_id),
+  )) {
+    const nomeMecanico = servico.mecanico_id
+      ? (nomesMecanicos.get(servico.mecanico_id) ?? "Mecânico removido")
+      : "Sem responsável";
     const chave = nomeMecanico;
     const atual = porMecanico.get(chave) ?? {
       nome: nomeMecanico,
@@ -117,7 +145,9 @@ function Relatorios() {
     }
   }
 
-  const estoqueBaixo = (data?.pecas ?? []).filter((p) => Number(p.estoque) <= Number(p.estoque_minimo));
+  const estoqueBaixo = (data?.pecas ?? []).filter(
+    (p) => Number(p.estoque) <= Number(p.estoque_minimo),
+  );
   const rankingMecanicos = [...porMecanico.values()].sort((a, b) => b.valor - a.valor);
   const rankingProdutos = [...porProduto.values()].sort((a, b) => b.quantidade - a.quantidade);
 
@@ -133,56 +163,163 @@ function Relatorios() {
             Fim
             <Input type="date" value={fim} onChange={(e) => setFim(e.target.value)} />
           </label>
-          <Button variant="outline" onClick={() => { setInicio(new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10)); setFim(new Date().toISOString().slice(0, 10)); }}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setInicio(
+                new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10),
+              );
+              setFim(new Date().toISOString().slice(0, 10));
+            }}
+          >
             Este mês
           </Button>
         </div>
       </PageHeader>
 
       {isLoading && <p className="text-sm text-muted-foreground">Carregando relatórios...</p>}
-      {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">Não foi possível carregar os relatórios: {(error as Error).message}</p>}
+      {error && (
+        <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          Não foi possível carregar os relatórios: {(error as Error).message}
+        </p>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="card-surface p-5"><p className="text-xs uppercase text-muted-foreground">Faturamento</p><p className="mt-2 font-display text-2xl font-bold">{brl(faturamento)}</p></div>
-        <div className="card-surface p-5"><p className="text-xs uppercase text-muted-foreground">OS finalizadas</p><p className="mt-2 font-display text-2xl font-bold">{data?.atendimentos.length ?? 0}</p></div>
-        <div className="card-surface p-5"><p className="text-xs uppercase text-muted-foreground">Ticket médio</p><p className="mt-2 font-display text-2xl font-bold">{brl(data?.atendimentos.length ? faturamento / data.atendimentos.length : 0)}</p></div>
-        <div className="card-surface p-5"><p className="text-xs uppercase text-muted-foreground">Estoque baixo</p><p className="mt-2 font-display text-2xl font-bold text-warning">{estoqueBaixo.length}</p></div>
+        <div className="card-surface p-5">
+          <p className="text-xs uppercase text-muted-foreground">Faturamento</p>
+          <p className="mt-2 font-display text-2xl font-bold">{brl(faturamento)}</p>
+        </div>
+        <div className="card-surface p-5">
+          <p className="text-xs uppercase text-muted-foreground">OS finalizadas</p>
+          <p className="mt-2 font-display text-2xl font-bold">{data?.atendimentos.length ?? 0}</p>
+        </div>
+        <div className="card-surface p-5">
+          <p className="text-xs uppercase text-muted-foreground">Ticket médio</p>
+          <p className="mt-2 font-display text-2xl font-bold">
+            {brl(data?.atendimentos.length ? faturamento / data.atendimentos.length : 0)}
+          </p>
+        </div>
+        <div className="card-surface p-5">
+          <p className="text-xs uppercase text-muted-foreground">Estoque baixo</p>
+          <p className="mt-2 font-display text-2xl font-bold text-warning">{estoqueBaixo.length}</p>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card-surface overflow-x-auto p-5">
           <h2 className="mb-3 font-display text-lg font-bold uppercase">Serviços por mecânico</h2>
-          <table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Mecânico</th><th className="p-2">Serviços</th><th className="p-2 text-right">Valor</th></tr></thead><tbody>
-            {rankingMecanicos.map((m) => <tr key={m.nome} className="border-b last:border-0"><td className="p-2">{m.nome}</td><td className="p-2">{m.quantidade}</td><td className="p-2 text-right">{brl(m.valor)}</td></tr>)}
-            {!rankingMecanicos.length && <tr><td colSpan={3} className="p-4 text-center text-muted-foreground">Sem serviços no período.</td></tr>}
-          </tbody></table>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="p-2">Mecânico</th>
+                <th className="p-2">Serviços</th>
+                <th className="p-2 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rankingMecanicos.map((m) => (
+                <tr key={m.nome} className="border-b last:border-0">
+                  <td className="p-2">{m.nome}</td>
+                  <td className="p-2">{m.quantidade}</td>
+                  <td className="p-2 text-right">{brl(m.valor)}</td>
+                </tr>
+              ))}
+              {!rankingMecanicos.length && (
+                <tr>
+                  <td colSpan={3} className="p-4 text-center text-muted-foreground">
+                    Sem serviços no período.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
 
         <section className="card-surface overflow-x-auto p-5">
           <h2 className="mb-3 font-display text-lg font-bold uppercase">Produtos mais usados</h2>
-          <table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Produto</th><th className="p-2 text-right">Quantidade</th></tr></thead><tbody>
-            {rankingProdutos.map((p) => <tr key={p.nome} className="border-b last:border-0"><td className="p-2">{p.nome}</td><td className="p-2 text-right">{p.quantidade}</td></tr>)}
-            {!rankingProdutos.length && <tr><td colSpan={2} className="p-4 text-center text-muted-foreground">Nenhum produto usado no período.</td></tr>}
-          </tbody></table>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="p-2">Produto</th>
+                <th className="p-2 text-right">Quantidade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rankingProdutos.map((p) => (
+                <tr key={p.nome} className="border-b last:border-0">
+                  <td className="p-2">{p.nome}</td>
+                  <td className="p-2 text-right">{p.quantidade}</td>
+                </tr>
+              ))}
+              {!rankingProdutos.length && (
+                <tr>
+                  <td colSpan={2} className="p-4 text-center text-muted-foreground">
+                    Nenhum produto usado no período.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
 
         <section className="card-surface overflow-x-auto p-5">
           <h2 className="mb-3 font-display text-lg font-bold uppercase">Estoque baixo</h2>
-          <table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Produto</th><th className="p-2">Atual</th><th className="p-2">Mínimo</th></tr></thead><tbody>
-            {estoqueBaixo.map((p) => <tr key={p.id} className="border-b last:border-0"><td className="p-2">{p.nome}</td><td className="p-2 text-warning">{p.estoque}</td><td className="p-2">{p.estoque_minimo}</td></tr>)}
-            {!estoqueBaixo.length && <tr><td colSpan={3} className="p-4 text-center text-muted-foreground">Nenhum item abaixo do mínimo.</td></tr>}
-          </tbody></table>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="p-2">Produto</th>
+                <th className="p-2">Atual</th>
+                <th className="p-2">Mínimo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estoqueBaixo.map((p) => (
+                <tr key={p.id} className="border-b last:border-0">
+                  <td className="p-2">{p.nome}</td>
+                  <td className="p-2 text-warning">{p.estoque}</td>
+                  <td className="p-2">{p.estoque_minimo}</td>
+                </tr>
+              ))}
+              {!estoqueBaixo.length && (
+                <tr>
+                  <td colSpan={3} className="p-4 text-center text-muted-foreground">
+                    Nenhum item abaixo do mínimo.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
 
         <section className="card-surface overflow-x-auto p-5">
           <h2 className="mb-3 font-display text-lg font-bold uppercase">Retornos pendentes</h2>
-          <table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Cliente</th><th className="p-2">Serviço</th><th className="p-2">Vencimento</th></tr></thead><tbody>
-            {(data?.retornos ?? []).map((r) => <tr key={r.id} className="border-b last:border-0"><td className="p-2">{r.cliente_nome}</td><td className="p-2">{r.servico}</td><td className="p-2">{r.vencimento}</td></tr>)}
-            {!data?.retornos.length && <tr><td colSpan={3} className="p-4 text-center text-muted-foreground">Nenhum retorno pendente até o fim do período.</td></tr>}
-          </tbody></table>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left">
+                <th className="p-2">Cliente</th>
+                <th className="p-2">Serviço</th>
+                <th className="p-2">Vencimento</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data?.retornos ?? []).map((r) => (
+                <tr key={r.id} className="border-b last:border-0">
+                  <td className="p-2">{r.cliente_nome}</td>
+                  <td className="p-2">{r.servico}</td>
+                  <td className="p-2">{r.vencimento}</td>
+                </tr>
+              ))}
+              {!data?.retornos.length && (
+                <tr>
+                  <td colSpan={3} className="p-4 text-center text-muted-foreground">
+                    Nenhum retorno pendente até o fim do período.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
       </div>
-
     </AppShell>
   );
 }

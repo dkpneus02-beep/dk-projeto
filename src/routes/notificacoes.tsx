@@ -64,7 +64,9 @@ const resultadoContatoLabel: Record<string, string> = {
 };
 
 function dtCurta(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(
+    new Date(value),
+  );
 }
 
 function Notificacoes() {
@@ -80,7 +82,7 @@ function Notificacoes() {
   const { data, isLoading } = useQuery({
     queryKey: ["retornos"],
     queryFn: async () => {
-      const { data: rows, error } = await (supabase as any)
+      const { data: rows, error } = await supabase
         .from("notificacoes_retorno")
         .select("*")
         .is("excluido_at", null)
@@ -95,7 +97,7 @@ function Notificacoes() {
     queryKey: ["retorno-contatos"],
     enabled: gerente,
     queryFn: async () => {
-      const { data: rows, error } = await (supabase as any)
+      const { data: rows, error } = await supabase
         .from("notificacoes_retorno_contatos")
         .select("id, retorno_id, resultado, observacao, contatado_em, contatado_por_nome")
         .order("contatado_em", { ascending: false });
@@ -110,7 +112,9 @@ function Notificacoes() {
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
-      toast.success(variables.status === "concluido" ? "Retorno marcado como resolvido" : "Retorno reaberto");
+      toast.success(
+        variables.status === "concluido" ? "Retorno marcado como resolvido" : "Retorno reaberto",
+      );
       void qc.invalidateQueries({ queryKey: ["retornos"] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -118,7 +122,7 @@ function Notificacoes() {
 
   const excluir = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("notificacoes_retorno")
         .update({ excluido_at: new Date().toISOString() })
         .eq("id", id);
@@ -132,9 +136,17 @@ function Notificacoes() {
   });
 
   const registrarContato = useMutation({
-    mutationFn: async ({ retornoId, resultado, observacao }: { retornoId: string; resultado: string; observacao: string }) => {
+    mutationFn: async ({
+      retornoId,
+      resultado,
+      observacao,
+    }: {
+      retornoId: string;
+      resultado: string;
+      observacao: string;
+    }) => {
       if (!user?.id) throw new Error("Sessão do gerente não encontrada.");
-      const { error } = await (supabase as any).from("notificacoes_retorno_contatos").insert({
+      const { error } = await supabase.from("notificacoes_retorno_contatos").insert({
         retorno_id: retornoId,
         resultado,
         observacao: observacao.trim() || null,
@@ -152,7 +164,13 @@ function Notificacoes() {
   });
 
   const editar = useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<"notificacoes_retorno"> }) => {
+    mutationFn: async ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: TablesUpdate<"notificacoes_retorno">;
+    }) => {
       const { error } = await supabase.from("notificacoes_retorno").update(patch).eq("id", id);
       if (error) throw error;
     },
@@ -212,7 +230,8 @@ function Notificacoes() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          A prioridade é calculada automaticamente: retornos vencidos ficam em destaque; os demais mostram quantos dias faltam.
+          A prioridade é calculada automaticamente: retornos vencidos ficam em destaque; os demais
+          mostram quantos dias faltam.
         </p>
       </div>
 
@@ -223,22 +242,42 @@ function Notificacoes() {
           const pendente = n.status === "pendente";
           const vencido = pendente && dias <= 0;
           return (
-            <div key={n.id} className={`card-surface flex flex-wrap items-center justify-between gap-4 p-4 ${vencido ? "border-destructive/60" : ""}`}>
+            <div
+              key={n.id}
+              className={`card-surface flex flex-wrap items-center justify-between gap-4 p-4 ${vencido ? "border-destructive/60" : ""}`}
+            >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">{n.cliente_nome}</p>
                   <Badge variant={vencido ? "destructive" : pendente ? "secondary" : "outline"}>
-                    {vencido ? `Prioridade alta · vencido há ${Math.abs(dias)} dias` : pendente ? `Faltam ${dias} dias` : "Resolvido"}
+                    {vencido
+                      ? `Prioridade alta · vencido há ${Math.abs(dias)} dias`
+                      : pendente
+                        ? `Faltam ${dias} dias`
+                        : "Resolvido"}
                   </Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">Veículo: {n.veiculo || "não informado"}</p>
-                <p className="text-sm text-muted-foreground">Serviço: {n.servico} · Data prevista: {d(n.vencimento)}</p>
-                {n.telefone && <p className="text-xs text-muted-foreground">Telefone: {n.telefone}</p>}
+                <p className="text-sm text-muted-foreground">
+                  Veículo: {n.veiculo || "não informado"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Serviço: {n.servico} · Data prevista: {d(n.vencimento)}
+                </p>
+                {n.telefone && (
+                  <p className="text-xs text-muted-foreground">Telefone: {n.telefone}</p>
+                )}
                 {(() => {
-                  const ultimoContato = (contatos ?? []).find((contato) => contato.retorno_id === n.id);
+                  const ultimoContato = (contatos ?? []).find(
+                    (contato) => contato.retorno_id === n.id,
+                  );
                   return ultimoContato ? (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Último contato: {resultadoContatoLabel[ultimoContato.resultado] ?? ultimoContato.resultado} em {dtCurta(ultimoContato.contatado_em)}{ultimoContato.contatado_por_nome ? ` por ${ultimoContato.contatado_por_nome}` : ""}
+                      Último contato:{" "}
+                      {resultadoContatoLabel[ultimoContato.resultado] ?? ultimoContato.resultado} em{" "}
+                      {dtCurta(ultimoContato.contatado_em)}
+                      {ultimoContato.contatado_por_nome
+                        ? ` por ${ultimoContato.contatado_por_nome}`
+                        : ""}
                     </p>
                   ) : null;
                 })()}
@@ -247,7 +286,10 @@ function Notificacoes() {
                 {pendente && n.telefone && (
                   <Button variant="outline" size="sm" asChild>
                     <a
-                      href={whatsappLink(n.telefone, `Olá ${n.cliente_nome}! Aqui é da DK Auto Center. Já faz um tempo desde o serviço de ${n.servico} no seu ${n.veiculo || "veículo"}. Que tal agendar uma revisão?`)}
+                      href={whatsappLink(
+                        n.telefone,
+                        `Olá ${n.cliente_nome}! Aqui é da DK Auto Center. Já faz um tempo desde o serviço de ${n.servico} no seu ${n.veiculo || "veículo"}. Que tal agendar uma revisão?`,
+                      )}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -269,17 +311,33 @@ function Notificacoes() {
                   <Button
                     size="sm"
                     variant={pendente ? "ghost" : "outline"}
-                    onClick={() => marcar.mutate({ id: n.id, status: pendente ? "concluido" : "pendente" })}
+                    onClick={() =>
+                      marcar.mutate({ id: n.id, status: pendente ? "concluido" : "pendente" })
+                    }
                     disabled={marcar.isPending}
                   >
-                    <i className={`fa-solid ${pendente ? "fa-check" : "fa-rotate-left"}`} /> {pendente ? "Resolver" : "Reabrir"}
+                    <i className={`fa-solid ${pendente ? "fa-check" : "fa-rotate-left"}`} />{" "}
+                    {pendente ? "Resolver" : "Reabrir"}
                   </Button>
                 )}
                 {gerente && (
                   <ConfirmActionDialog
-                    trigger={<button className="text-muted-foreground hover:text-destructive" title="Excluir retorno de teste"><i className="fa-solid fa-trash-can" /></button>}
+                    trigger={
+                      <button
+                        className="text-muted-foreground hover:text-destructive"
+                        title="Excluir retorno de teste"
+                      >
+                        <i className="fa-solid fa-trash-can" />
+                      </button>
+                    }
                     title="Excluir retorno"
-                    description={<>Tem certeza absoluta de que deseja ocultar o retorno de <strong className="text-foreground">{n.cliente_nome}</strong>? O registro não será apagado do banco, apenas retirado da lista.</>}
+                    description={
+                      <>
+                        Tem certeza absoluta de que deseja ocultar o retorno de{" "}
+                        <strong className="text-foreground">{n.cliente_nome}</strong>? O registro
+                        não será apagado do banco, apenas retirado da lista.
+                      </>
+                    }
                     confirmLabel="Sim, excluir retorno"
                     destructive
                     onConfirm={() => excluir.mutateAsync(n.id)}
@@ -303,7 +361,9 @@ function Notificacoes() {
           open
           saving={registrarContato.isPending}
           onClose={() => setContatoAberto(null)}
-          onSave={(resultado, observacao) => registrarContato.mutate({ retornoId: contatoAberto.id, resultado, observacao })}
+          onSave={(resultado, observacao) =>
+            registrarContato.mutate({ retornoId: contatoAberto.id, resultado, observacao })
+          }
         />
       )}
 
@@ -343,25 +403,39 @@ function RegistrarContatoDialog({
           <DialogTitle className="font-display text-2xl uppercase">Registrar contato</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          {retorno.cliente_nome} · {retorno.telefone || "telefone não informado"}. A data, o horário e o usuário serão gravados automaticamente.
+          {retorno.cliente_nome} · {retorno.telefone || "telefone não informado"}. A data, o horário
+          e o usuário serão gravados automaticamente.
         </p>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Resultado do contato</Label>
             <Select value={resultado} onValueChange={setResultado}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {Object.entries(resultadoContatoLabel).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
+                {Object.entries(resultadoContatoLabel).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label>Observação do contato</Label>
-            <Textarea value={observacao} onChange={(event) => setObservacao(event.target.value)} placeholder="Ex.: Cliente informou que não deseja realizar o retorno neste momento." rows={4} />
+            <Textarea
+              value={observacao}
+              onChange={(event) => setObservacao(event.target.value)}
+              placeholder="Ex.: Cliente informou que não deseja realizar o retorno neste momento."
+              rows={4}
+            />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
           <Button onClick={() => onSave(resultado, observacao)} disabled={saving}>
             {saving && <i className="fa-solid fa-circle-notch fa-spin" />} Salvar contato
           </Button>
@@ -402,7 +476,8 @@ function EditarRetornoDialog({
     });
   }, [retorno]);
 
-  const set = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const set = (field: keyof typeof form, value: string) =>
+    setForm((current) => ({ ...current, [field]: value }));
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -411,23 +486,51 @@ function EditarRetornoDialog({
           <DialogTitle className="font-display text-2xl uppercase">Editar retorno</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2"><Label>Cliente</Label><Input value={form.cliente_nome} onChange={(e) => set("cliente_nome", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Telefone</Label><Input value={form.telefone} onChange={(e) => set("telefone", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Veículo</Label><Input value={form.veiculo} onChange={(e) => set("veiculo", e.target.value)} /></div>
-          <div className="space-y-1.5 sm:col-span-2"><Label>Serviço</Label><Input value={form.servico} onChange={(e) => set("servico", e.target.value)} /></div>
-          <div className="space-y-1.5"><Label>Data prevista</Label><Input type="date" value={form.vencimento} onChange={(e) => set("vencimento", e.target.value)} /></div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Cliente</Label>
+            <Input
+              value={form.cliente_nome}
+              onChange={(e) => set("cliente_nome", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Telefone</Label>
+            <Input value={form.telefone} onChange={(e) => set("telefone", e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Veículo</Label>
+            <Input value={form.veiculo} onChange={(e) => set("veiculo", e.target.value)} />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Serviço</Label>
+            <Input value={form.servico} onChange={(e) => set("servico", e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Data prevista</Label>
+            <Input
+              type="date"
+              value={form.vencimento}
+              onChange={(e) => set("vencimento", e.target.value)}
+            />
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancelar
+          </Button>
           <Button
-            onClick={() => onSave({
-              cliente_nome: form.cliente_nome.trim(),
-              telefone: form.telefone.trim() || null,
-              veiculo: form.veiculo.trim() || null,
-              servico: form.servico.trim(),
-              vencimento: form.vencimento,
-            })}
-            disabled={saving || !form.cliente_nome.trim() || !form.servico.trim() || !form.vencimento}
+            onClick={() =>
+              onSave({
+                cliente_nome: form.cliente_nome.trim(),
+                telefone: form.telefone.trim() || null,
+                veiculo: form.veiculo.trim() || null,
+                servico: form.servico.trim(),
+                vencimento: form.vencimento,
+              })
+            }
+            disabled={
+              saving || !form.cliente_nome.trim() || !form.servico.trim() || !form.vencimento
+            }
           >
             {saving && <i className="fa-solid fa-circle-notch fa-spin" />}
             Salvar retorno

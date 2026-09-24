@@ -18,15 +18,15 @@ A primeira atualização em andamento adicionou um catálogo de referências equ
 
 ## 3. Identificação do projeto
 
-| Item | Informação |
-|---|---|
-| Repositório | `dkpneus02-beep/dk-projeto` |
-| Branch correta de origem | `feat/orcamentos-temporarios` |
-| Commit de origem | `59dc325` |
+| Item                     | Informação                        |
+| ------------------------ | --------------------------------- |
+| Repositório              | `dkpneus02-beep/dk-projeto`       |
+| Branch correta de origem | `feat/orcamentos-temporarios`     |
+| Commit de origem         | `59dc325`                         |
 | Branch atual de trabalho | `feat/catalogo-pecas-referencias` |
-| Supabase | Projeto `fkkplzwefhjohpfjwcwn` |
-| Site publicado | `dkautocenterr.netlify.app` |
-| Deploy | Não alterado nesta etapa |
+| Supabase                 | Projeto `fkkplzwefhjohpfjwcwn`    |
+| Site publicado           | `dkautocenterr.netlify.app`       |
+| Deploy                   | Não alterado nesta etapa          |
 
 A referência oficial do repositório e do site está no final deste documento.
 
@@ -56,23 +56,23 @@ As migrações ficam em `supabase/migrations`. Cada alteração estrutural deve 
 
 As rotas principais ficam em `src/routes`.
 
-| Rota ou arquivo | Finalidade |
-|---|---|
-| `/` | Painel mensal com receita, custos, lucro, estoque baixo, pátio e retornos |
-| `/auth` | Login da equipe |
-| `/patio` | Controle dos veículos no pátio e vagas disponíveis |
-| `/atendimento/$id` | Ordem de serviço, checklist, serviços, peças, mecânico e pagamento |
-| `/historico` | Histórico de atendimentos |
-| `/pecas` | Cadastro, edição, busca e estoque de peças e pneus |
-| `/orcamentos` | Orçamentos temporários e conversão para atendimento |
-| `/caixa` | Caixa diário e movimentos financeiros |
-| `/mecanicos` | Cadastro e controle dos mecânicos |
-| `/notificacoes-internas` | Comunicação interna da equipe |
-| `/notificacoes` | Retornos de clientes e acompanhamento pós-serviço |
-| `/relatorios` | Relatórios gerenciais |
-| `/configuracoes` | Dados e preferências da oficina |
-| `/backup` | Rotinas relacionadas ao backup |
-| `/reset-password` | Redefinição de senha |
+| Rota ou arquivo          | Finalidade                                                                |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `/`                      | Painel mensal com receita, custos, lucro, estoque baixo, pátio e retornos |
+| `/auth`                  | Login da equipe                                                           |
+| `/patio`                 | Controle dos veículos no pátio e vagas disponíveis                        |
+| `/atendimento/$id`       | Ordem de serviço, checklist, serviços, peças, mecânico e pagamento        |
+| `/historico`             | Histórico de atendimentos                                                 |
+| `/pecas`                 | Cadastro, edição, busca e estoque de peças e pneus                        |
+| `/orcamentos`            | Orçamentos temporários e conversão para atendimento                       |
+| `/caixa`                 | Caixa diário e movimentos financeiros                                     |
+| `/mecanicos`             | Cadastro e controle dos mecânicos                                         |
+| `/notificacoes-internas` | Comunicação interna da equipe                                             |
+| `/notificacoes`          | Retornos de clientes e acompanhamento pós-serviço                         |
+| `/relatorios`            | Relatórios gerenciais                                                     |
+| `/configuracoes`         | Dados e preferências da oficina                                           |
+| `/backup`                | Rotinas relacionadas ao backup                                            |
+| `/reset-password`        | Redefinição de senha                                                      |
 
 Também existem rotas de API, como `api.upload-imgbb.ts`, usadas para integração de upload de imagens.
 

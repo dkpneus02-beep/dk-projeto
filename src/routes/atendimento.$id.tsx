@@ -1468,13 +1468,15 @@ function FinalizarDialog({
   }) => void;
 }) {
   const bruto = servicos.reduce((s, x) => s + Number(x.valor), 0);
-  const [pagamentos, setPagamentos] = useState([
-    { forma: "Dinheiro", valor: bruto, parcelas: 1 },
-  ]);
+  const [pagamentos, setPagamentos] = useState([{ forma: "Dinheiro", valor: bruto, parcelas: 1 }]);
   const pecasElegiveis = servicos
-    .filter((servico) => servico.peca_id && pecas.find((peca) => peca.id === servico.peca_id)?.aceita_desconto_pix)
+    .filter(
+      (servico) =>
+        servico.peca_id && pecas.find((peca) => peca.id === servico.peca_id)?.aceita_desconto_pix,
+    )
     .reduce((s, servico) => s + Number(servico.preco_peca ?? 0), 0);
-  const pagamentoPix = pagamentos.length > 0 && pagamentos.every((pagamento) => pagamento.forma === "PIX");
+  const pagamentoPix =
+    pagamentos.length > 0 && pagamentos.every((pagamento) => pagamento.forma === "PIX");
   const desconto = pagamentoPix ? Math.round(pecasElegiveis * 0.25 * 100) / 100 : 0;
   const liquido = Math.max(bruto - desconto, 0);
   useEffect(() => {
@@ -1504,9 +1506,11 @@ function FinalizarDialog({
         _data_retorno_manual: necessitaRetorno && dataRetorno ? dataRetorno : null,
       });
       if (error) throw error;
-      const retorno = resultado as
-        | { garantia_ate?: string | null; desconto?: number; total?: number }
-        | null;
+      const retorno = resultado as {
+        garantia_ate?: string | null;
+        desconto?: number;
+        total?: number;
+      } | null;
       return {
         garantiaAteStr: retorno?.garantia_ate ?? null,
         desconto: Number(retorno?.desconto ?? desconto),
@@ -1515,7 +1519,12 @@ function FinalizarDialog({
     },
     onSuccess: ({ garantiaAteStr, desconto: descontoFinal, total: totalFinal }) => {
       toast.success("Atendimento finalizado e registrado no caixa");
-      onDone({ desconto: descontoFinal, total: totalFinal, garantia_ate: garantiaAteStr, pagamentos });
+      onDone({
+        desconto: descontoFinal,
+        total: totalFinal,
+        garantia_ate: garantiaAteStr,
+        pagamentos,
+      });
     },
     onError: (e: Error) => toast.error(e.message),
   });

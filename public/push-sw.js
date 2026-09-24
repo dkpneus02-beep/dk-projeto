@@ -13,7 +13,10 @@ self.addEventListener("push", (event) => {
     badge: "/dk-favicon-32.png",
     tag: data.tag || data.notification_id || "dk-auto-center",
     renotify: Boolean(data.renotify),
-    data: { url: data.url || "/notificacoes-internas", notification_id: data.notification_id || null },
+    data: {
+      url: data.url || "/notificacoes-internas",
+      notification_id: data.notification_id || null,
+    },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -21,7 +24,10 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = new URL(event.notification.data?.url || "/notificacoes-internas", self.location.origin).href;
+  const targetUrl = new URL(
+    event.notification.data?.url || "/notificacoes-internas",
+    self.location.origin,
+  ).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const existing = clients.find((client) => "focus" in client);

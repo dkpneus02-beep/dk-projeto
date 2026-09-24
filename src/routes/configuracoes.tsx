@@ -13,7 +13,10 @@ export const Route = createFileRoute("/configuracoes")({
   head: () => ({
     meta: [
       { title: "Configurações | DK Auto Center" },
-      { name: "description", content: "Horário de fechamento, garantia padrão e alertas do sistema." },
+      {
+        name: "description",
+        content: "Horário de fechamento, garantia padrão e alertas do sistema.",
+      },
       { property: "og:title", content: "Configurações | DK Auto Center" },
       { property: "og:description", content: "Ajustes gerais do sistema da oficina." },
     ],
