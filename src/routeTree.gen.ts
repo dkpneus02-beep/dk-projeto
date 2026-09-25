@@ -23,6 +23,7 @@ import { Route as OrcamentosRouteImport } from './routes/orcamentos'
 import { Route as PatioRouteImport } from './routes/patio'
 import { Route as PecasRouteImport } from './routes/pecas'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
+import { Route as RepasseTaxasRouteImport } from './routes/repasse-taxas'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ApiUploadImgbbRouteImport } from './routes/api.upload-imgbb'
 import { Route as AtendimentoIdRouteImport } from './routes/atendimento.$id'
@@ -97,6 +98,11 @@ const RelatoriosRoute = RelatoriosRouteImport.update({
   path: '/relatorios',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RepasseTaxasRoute = RepasseTaxasRouteImport.update({
+  id: '/repasse-taxas',
+  path: '/repasse-taxas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
   '/relatorios': typeof RelatoriosRoute
+  '/repasse-taxas': typeof RepasseTaxasRoute
   '/reset-password': typeof ResetPasswordRoute
   '/api/upload-imgbb': typeof ApiUploadImgbbRoute
   '/atendimento/$id': typeof AtendimentoIdRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
   '/relatorios': typeof RelatoriosRoute
+  '/repasse-taxas': typeof RepasseTaxasRoute
   '/reset-password': typeof ResetPasswordRoute
   '/api/upload-imgbb': typeof ApiUploadImgbbRoute
   '/atendimento/$id': typeof AtendimentoIdRoute
@@ -167,6 +175,7 @@ export interface FileRoutesById {
   '/patio': typeof PatioRoute
   '/pecas': typeof PecasRoute
   '/relatorios': typeof RelatoriosRoute
+  '/repasse-taxas': typeof RepasseTaxasRoute
   '/reset-password': typeof ResetPasswordRoute
   '/api/upload-imgbb': typeof ApiUploadImgbbRoute
   '/atendimento/$id': typeof AtendimentoIdRoute
@@ -188,6 +197,7 @@ export interface FileRouteTypes {
     | '/patio'
     | '/pecas'
     | '/relatorios'
+    | '/repasse-taxas'
     | '/reset-password'
     | '/api/upload-imgbb'
     | '/atendimento/$id'
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/patio'
     | '/pecas'
     | '/relatorios'
+    | '/repasse-taxas'
     | '/reset-password'
     | '/api/upload-imgbb'
     | '/atendimento/$id'
@@ -226,6 +237,7 @@ export interface FileRouteTypes {
     | '/patio'
     | '/pecas'
     | '/relatorios'
+    | '/repasse-taxas'
     | '/reset-password'
     | '/api/upload-imgbb'
     | '/atendimento/$id'
@@ -246,6 +258,7 @@ export interface RootRouteChildren {
   PatioRoute: typeof PatioRoute
   PecasRoute: typeof PecasRoute
   RelatoriosRoute: typeof RelatoriosRoute
+  RepasseTaxasRoute: typeof RepasseTaxasRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiUploadImgbbRoute: typeof ApiUploadImgbbRoute
   AtendimentoIdRoute: typeof AtendimentoIdRoute
@@ -351,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RelatoriosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/repasse-taxas': {
+      id: '/repasse-taxas'
+      path: '/repasse-taxas'
+      fullPath: '/repasse-taxas'
+      preLoaderRoute: typeof RepasseTaxasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -390,6 +410,7 @@ const rootRouteChildren: RootRouteChildren = {
   PatioRoute: PatioRoute,
   PecasRoute: PecasRoute,
   RelatoriosRoute: RelatoriosRoute,
+  RepasseTaxasRoute: RepasseTaxasRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ApiUploadImgbbRoute: ApiUploadImgbbRoute,
   AtendimentoIdRoute: AtendimentoIdRoute,

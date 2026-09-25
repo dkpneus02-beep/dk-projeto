@@ -65,6 +65,57 @@ export type Database = {
         };
         Relationships: [];
       };
+      financeiro_taxas_repasse: {
+        Row: {
+          credito_10x_percentual: number;
+          credito_11x_percentual: number;
+          credito_12x_percentual: number;
+          credito_1x_percentual: number;
+          credito_2x_percentual: number;
+          credito_3x_percentual: number;
+          credito_4x_percentual: number;
+          credito_5x_percentual: number;
+          credito_6x_percentual: number;
+          credito_7x_percentual: number;
+          credito_8x_percentual: number;
+          credito_9x_percentual: number;
+          dinheiro_percentual: number;
+          debito_percentual: number;
+          id: boolean;
+          pix_percentual: number;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["financeiro_taxas_repasse"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["financeiro_taxas_repasse"]["Row"]>;
+        Relationships: [];
+      };
+      financeiro_vendas_repasse: {
+        Row: {
+          base_apos_desconto: number;
+          cmv: number;
+          criado_em: string;
+          criado_por: string | null;
+          deleted_at: string | null;
+          desconto_concedido: number;
+          forma_pagamento: string;
+          id: string;
+          lucro_real: number;
+          parcelas: number;
+          quantidade: number;
+          taxa_maquininha: number;
+          taxa_percentual: number;
+          total_cobrado: number;
+          valor_acrescimo: number;
+          valor_original: number;
+          valor_parcela: number;
+          valor_real_recebido: number;
+          valor_unitario: number;
+        };
+        Insert: Partial<Database["public"]["Tables"]["financeiro_vendas_repasse"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["financeiro_vendas_repasse"]["Row"]>;
+        Relationships: [];
+      };
       peca_lotes: {
         Row: {
           criado_em: string;
@@ -1470,6 +1521,14 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      registrar_venda_repasse: {
+        Args: { _venda: Json };
+        Returns: Database["public"]["Tables"]["financeiro_vendas_repasse"]["Row"];
+      };
+      salvar_taxas_repasse: {
+        Args: { _taxas: Json };
+        Returns: Database["public"]["Tables"]["financeiro_taxas_repasse"]["Row"];
       };
       adicionar_entrada_estoque: {
         Args: { _peca_id: string; _quantidade: number };

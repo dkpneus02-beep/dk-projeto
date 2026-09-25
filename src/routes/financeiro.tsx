@@ -191,6 +191,25 @@ function Financeiro() {
     },
   });
 
+  const { data: vendasRepasse = [] } = useQuery({
+    queryKey: ["financeiro-vendas-repasse", mes],
+    enabled: gerente,
+    queryFn: async () => {
+      const inicio = `${mes}-01T00:00:00`;
+      const fim = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 1).toISOString();
+      const { data, error } = await supabase
+        .from("financeiro_vendas_repasse")
+        .select(
+          "id, valor_original, desconto_concedido, total_cobrado, taxa_maquininha, valor_real_recebido, cmv, lucro_real, criado_em, forma_pagamento",
+        )
+        .is("deleted_at", null)
+        .gte("criado_em", inicio)
+        .lt("criado_em", fim);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   useEffect(() => {
     if (parametrosMaoObra)
       setPercentualMaoObra(String(parametrosMaoObra.custo_mao_obra_percentual));
@@ -376,6 +395,23 @@ function Financeiro() {
     0,
   );
   const resultadoAposCustosDiretos = resultadoAposCmv - custoMaoObra;
+  const faturamentoRepasse = vendasRepasse.reduce(
+    (s, venda) => s + Number(venda.valor_original || 0),
+    0,
+  );
+  const descontosRepasse = vendasRepasse.reduce(
+    (s, venda) => s + Number(venda.desconto_concedido || 0),
+    0,
+  );
+  const taxasRepasse = vendasRepasse.reduce(
+    (s, venda) => s + Number(venda.taxa_maquininha || 0),
+    0,
+  );
+  const recebidoRepasse = vendasRepasse.reduce(
+    (s, venda) => s + Number(venda.valor_real_recebido || 0),
+    0,
+  );
+  const lucroRepasse = vendasRepasse.reduce((s, venda) => s + Number(venda.lucro_real || 0), 0);
   const pendentes = gastos
     .filter((g) => g.status === "pendente" || g.status === "atrasado")
     .reduce((s, g) => s + Number(g.valor_total || 0), 0);
@@ -487,6 +523,17 @@ function Financeiro() {
         <Kpi label="Descontos" value={brl(descontos)} tone="text-warning" />
         <Kpi label="Entradas no caixa" value={brl(entradasCaixa)} tone="text-success" />
         <Kpi label="Saídas no caixa" value={brl(saidasCaixa)} tone="text-destructive" />
+      </div>
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Kpi label="Faturamento por repasse" value={brl(faturamentoRepasse)} />
+        <Kpi label="Descontos por repasse" value={brl(descontosRepasse)} tone="text-warning" />
+        <Kpi label="Taxas de maquininha" value={brl(taxasRepasse)} tone="text-warning" />
+        <Kpi label="Recebido real por repasse" value={brl(recebidoRepasse)} tone="text-success" />
+        <Kpi
+          label="Lucro real por repasse"
+          value={brl(lucroRepasse)}
+          tone={lucroRepasse >= 0 ? "text-success" : "text-destructive"}
+        />
       </div>
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <Kpi

@@ -14,6 +14,7 @@ export type NavKey =
   | "historico"
   | "caixa"
   | "financeiro"
+  | "repasse-taxas"
   | "pecas"
   | "mecanicos"
   | "notificacoes"
@@ -42,6 +43,7 @@ const NAV_GERENTE: NavKey[] = [
   "notificacoes-internas",
   "caixa",
   "financeiro",
+  "repasse-taxas",
   "pecas",
   "notificacoes",
   "relatorios",

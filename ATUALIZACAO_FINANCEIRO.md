@@ -220,3 +220,16 @@ O build e a checagem de whitespace passaram após as duas implementações. Nenh
 Foi executada a limpeza de formatação com Prettier em todo o projeto. Os casts `any` desnecessários nas telas de notificações foram removidos, e os avisos de dependência dos hooks de alertas e do painel inicial foram corrigidos. A revisão não encontrou novos erros semânticos.
 
 O lint final terminou com **0 erros** e apenas oito avisos de Fast Refresh em componentes compartilhados da biblioteca de UI e no hook de autenticação. Esses avisos não indicam falha de execução e não bloqueiam o build. O build de produção terminou com sucesso e `git diff --check` também passou. Nenhum deploy foi realizado.
+
+
+## Nova aba — Calculadora de Repasse de Taxas
+
+Foi criada a rota `/repasse-taxas`, exclusiva para gerente, com acesso no menu lateral. A configuração de taxas permanece oculta por padrão e só abre com o atalho `Alt + Shift + T`. O painel permite cadastrar separadamente PIX, espécie/dinheiro, débito e crédito parcelado de 1X a 12X.
+
+A calculadora aceita valor unitário, quantidade, desconto concedido, custo do produto/CMV, forma de pagamento e parcelas. O cálculo usa a fórmula de repasse por fora: `total a cobrar = base após desconto / (1 - taxa / 100)`. O acréscimo, total, valor da parcela, taxa em reais, valor real recebido e lucro real são arredondados para centavos na interface e recalculados autoritariamente no banco ao registrar a venda.
+
+A migração `supabase/migrations/20260925100000_calculadora_repasse_taxas.sql` criou a configuração gerencial e o livro de vendas `financeiro_vendas_repasse`. Ao confirmar uma venda, são preservados faturamento bruto, desconto, base após desconto, taxa percentual, taxa em reais, total cobrado, valor da parcela, valor real recebido, CMV e lucro real. Havendo sessão de Caixa aberta, o total cobrado também é lançado como entrada identificada como venda com repasse de taxa.
+
+O Financeiro passou a exibir, por competência mensal, faturamento por repasse, descontos por repasse, taxas de maquininha, recebimento real e lucro real. A fórmula de referência foi validada no banco com R$ 100,00 e taxa de 12,83%, resultando em R$ 114,72 cobrados, R$ 14,72 de acréscimo e R$ 11,47 por parcela em 10 vezes.
+
+A nova funcionalidade foi aplicada no Supabase e validada com build e lint. Nenhum deploy foi realizado.
