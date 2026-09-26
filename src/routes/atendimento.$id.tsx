@@ -1486,6 +1486,10 @@ function FinalizarDialog({
   }, [liquido, pagamentos]);
   const somaPag = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
   const ok = Math.abs(somaPag - liquido) < 0.01;
+  const pagamentosParaEnviar =
+    pagamentos.length === 1
+      ? pagamentos.map((pagamento) => ({ ...pagamento, valor: Number(liquido.toFixed(2)) }))
+      : pagamentos;
 
   // Retorno agora é uma decisão manual do gerente, não mais gerado
   // automaticamente pelo sistema a partir do catálogo de serviços.
@@ -1497,7 +1501,7 @@ function FinalizarDialog({
       const { data: resultado, error } = await supabase.rpc("finalizar_atendimento_transacional", {
         _atendimento_id: atendimento.id,
         _desconto: desconto,
-        _pagamentos: pagamentos.map((p) => ({
+        _pagamentos: pagamentosParaEnviar.map((p) => ({
           forma: p.forma,
           valor: Number(p.valor),
           parcelas: p.parcelas,
@@ -1523,7 +1527,7 @@ function FinalizarDialog({
         desconto: descontoFinal,
         total: totalFinal,
         garantia_ate: garantiaAteStr,
-        pagamentos,
+        pagamentos: pagamentosParaEnviar,
       });
     },
     onError: (e: Error) => toast.error(e.message),
