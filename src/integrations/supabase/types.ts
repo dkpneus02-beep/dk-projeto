@@ -882,6 +882,56 @@ export type Database = {
           },
         ]
       }
+      peca_ajustes_estoque: {
+        Row: {
+          custo_total: number
+          custo_unitario: number
+          criado_em: string
+          estoque_anterior: number
+          estoque_novo: number
+          id: string
+          motivo: string
+          peca_id: string
+          quantidade: number
+          registrado_por: string | null
+          tipo: string
+        }
+        Insert: {
+          custo_total: number
+          custo_unitario: number
+          criado_em?: string
+          estoque_anterior: number
+          estoque_novo: number
+          id?: string
+          motivo: string
+          peca_id: string
+          quantidade: number
+          registrado_por?: string | null
+          tipo: string
+        }
+        Update: {
+          custo_total?: number
+          custo_unitario?: number
+          criado_em?: string
+          estoque_anterior?: number
+          estoque_novo?: number
+          id?: string
+          motivo?: string
+          peca_id?: string
+          quantidade?: number
+          registrado_por?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peca_ajustes_estoque_peca_id_fkey"
+            columns: ["peca_id"]
+            isOneToOne: false
+            referencedRelation: "pecas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       peca_referencias: {
         Row: {
           created_at: string
@@ -1123,6 +1173,44 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ajustar_estoque_com_lotes: {
+        Args: {
+          _custo_unitario_entrada?: number
+          _estoque_alvo: number
+          _motivo: string
+          _peca_id: string
+        }
+        Returns: {
+          aceita_desconto_pix: boolean
+          aplicacao: string | null
+          categoria: string
+          construcao: string | null
+          created_at: string
+          deleted_at: string | null
+          estoque: number
+          estoque_minimo: number
+          id: string
+          indice_carga: string | null
+          marca: string | null
+          margem: number
+          medida: string | null
+          modelo_desenho: string | null
+          nome: string
+          observacoes: string | null
+          preco_custo: number
+          preco_venda: number
+          simbolo_velocidade: string | null
+          sku: string | null
+          tipo: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pecas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       adicionar_entrada_estoque_com_custo: {
         Args: { _peca_id: string; _preco_custo: number; _quantidade: number }
         Returns: {

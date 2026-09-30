@@ -69,6 +69,15 @@ type PecaForm = {
   referencias: ReferenciaForm[];
 };
 
+type AjusteEstoqueForm = {
+  pecaId: string;
+  pecaNome: string;
+  estoqueAtual: number;
+  estoqueAlvo: number;
+  custoUnitario: number;
+  motivo: string;
+};
+
 let referenciaChave = 0;
 const novaReferencia = (): ReferenciaForm => ({
   chave: `referencia-${++referenciaChave}`,
@@ -109,6 +118,7 @@ function Pecas() {
   const [entradaPecaId, setEntradaPecaId] = useState("");
   const [entradaQuantidade, setEntradaQuantidade] = useState(1);
   const [entradaCusto, setEntradaCusto] = useState(0);
+  const [ajuste, setAjuste] = useState<AjusteEstoqueForm | null>(null);
   const [favoritos, setFavoritos] = useState<string[]>([]);
 
   useEffect(() => {
@@ -183,6 +193,9 @@ function Pecas() {
       ),
     [data, busca, tab, favoritos, referenciasPorPeca],
   );
+  const ajusteDelta = ajuste
+    ? Math.round((ajuste.estoqueAlvo - ajuste.estoqueAtual) * 100) / 100
+    : 0;
 
   const aplicarCodigo = (codigoBruto: string) => {
     const codigo = codigoBruto.trim();
@@ -235,6 +248,12 @@ function Pecas() {
       if (referenciasPreenchidas.filter((referencia) => referencia.principal).length > 1) {
         throw new Error("Selecione no máximo uma referência principal.");
       }
+      if (!Number.isFinite(p.estoque) || p.estoque < 0) {
+        throw new Error("O estoque inicial não pode ser negativo.");
+      }
+      if (!Number.isFinite(p.preco_custo) || p.preco_custo < 0) {
+        throw new Error("O custo unitário inicial não pode ser negativo.");
+      }
 
       if (sku) {
         const { data: duplicado, error: erroDuplicado } = await supabase
@@ -256,9 +275,7 @@ function Pecas() {
         tipo: p.tipo,
         aceita_desconto_pix: p.aceita_desconto_pix,
         categoria: p.tipo,
-        estoque: p.estoque,
         estoque_minimo: p.estoque_minimo,
-        preco_custo: p.preco_custo,
         margem: p.margem,
         preco_venda: p.preco_venda,
         medida: p.medida || null,
@@ -272,9 +289,23 @@ function Pecas() {
 
       const pecaResult = p.id
         ? await supabase.from("pecas").update(payload).eq("id", p.id).select("id").single()
-        : await supabase.from("pecas").insert(payload).select("id").single();
+        : await supabase
+            .from("pecas")
+            .insert({ ...payload, estoque: 0, preco_custo: Number(p.preco_custo.toFixed(2)) })
+            .select("id")
+            .single();
       if (pecaResult.error) throw pecaResult.error;
       const pecaId = pecaResult.data.id;
+      let erroEstoqueInicial: string | null = null;
+      if (!p.id && p.estoque > 0) {
+        const { error } = await supabase.rpc("ajustar_estoque_com_lotes", {
+          _peca_id: pecaId,
+          _estoque_alvo: Number(p.estoque.toFixed(2)),
+          _motivo: "Estoque inicial do cadastro",
+          _custo_unitario_entrada: Number(p.preco_custo.toFixed(2)),
+        });
+        if (error) erroEstoqueInicial = error.message;
+      }
 
       const { data: referenciasAtuais, error: erroReferenciasAtuais } = await supabase
         .from("peca_referencias")
@@ -342,9 +373,16 @@ function Pecas() {
           .in("id", idsRemovidos);
         if (error) throw error;
       }
+      return { erroEstoqueInicial };
     },
-    onSuccess: () => {
-      toast.success("Item salvo");
+    onSuccess: ({ erroEstoqueInicial }) => {
+      if (erroEstoqueInicial) {
+        toast.error(
+          `Item salvo, mas o estoque inicial não foi registrado: ${erroEstoqueInicial}. Use Ajustar estoque para tentar novamente.`,
+        );
+      } else {
+        toast.success("Item salvo");
+      }
       setEdit(null);
       void qc.invalidateQueries({ queryKey: ["pecas"] });
       void qc.invalidateQueries({ queryKey: ["peca-referencias"] });
@@ -371,6 +409,39 @@ function Pecas() {
       setEntradaPecaId("");
       setEntradaQuantidade(1);
       setEntradaCusto(0);
+      void qc.invalidateQueries({ queryKey: ["pecas"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const ajustarEstoque = useMutation({
+    mutationFn: async (form: AjusteEstoqueForm) => {
+      const estoqueAlvo = Math.round(form.estoqueAlvo * 100) / 100;
+      const diferenca = Math.round((estoqueAlvo - form.estoqueAtual) * 100) / 100;
+      if (!Number.isFinite(estoqueAlvo) || estoqueAlvo < 0) {
+        throw new Error("O estoque final deve ser zero ou maior.");
+      }
+      if (Math.abs(diferenca) < 0.01) {
+        throw new Error("Informe uma quantidade final diferente do estoque atual.");
+      }
+      if (!form.motivo.trim()) throw new Error("Informe o motivo do ajuste.");
+      const custoUnitario = Math.round(form.custoUnitario * 100) / 100;
+      if (diferenca > 0 && (!Number.isFinite(custoUnitario) || custoUnitario < 0)) {
+        throw new Error("Informe um custo unitário válido para a entrada.");
+      }
+      const { data: item, error } = await supabase.rpc("ajustar_estoque_com_lotes", {
+        _peca_id: form.pecaId,
+        _estoque_alvo: estoqueAlvo,
+        _motivo: form.motivo.trim(),
+        ...(diferenca > 0 ? { _custo_unitario_entrada: custoUnitario } : {}),
+      });
+      if (error) throw error;
+      return { item, diferenca };
+    },
+    onSuccess: ({ item, diferenca }) => {
+      const sinal = diferenca > 0 ? "+" : "";
+      toast.success(`Ajuste registrado: ${sinal}${diferenca.toFixed(2)} em ${item.nome}.`);
+      setAjuste(null);
       void qc.invalidateQueries({ queryKey: ["pecas"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -523,6 +594,23 @@ function Pecas() {
                   </button>
                   <button
                     className="mr-3 text-muted-foreground hover:text-foreground"
+                    title="Ajustar estoque"
+                    aria-label={`Ajustar estoque de ${p.nome}`}
+                    onClick={() =>
+                      setAjuste({
+                        pecaId: p.id,
+                        pecaNome: p.nome,
+                        estoqueAtual: Number(p.estoque),
+                        estoqueAlvo: Number(p.estoque),
+                        custoUnitario: Number(p.preco_custo),
+                        motivo: "",
+                      })
+                    }
+                  >
+                    <i className="fa-solid fa-boxes-stacked" />
+                  </button>
+                  <button
+                    className="mr-3 text-muted-foreground hover:text-foreground"
                     onClick={() => abrir(p)}
                     title="Editar item"
                   >
@@ -637,6 +725,100 @@ function Pecas() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={Boolean(ajuste)}
+        onOpenChange={(open) => {
+          if (!open && !ajustarEstoque.isPending) setAjuste(null);
+        }}
+      >
+        {ajuste && (
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display text-2xl uppercase">
+                Ajuste de estoque
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              O ajuste será registrado com motivo e custo, preservando a trilha de lotes. Entradas
+              criam um lote e recalculam o custo médio; saídas consomem lotes pelo FIFO.
+            </p>
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="font-medium">{ajuste.pecaNome}</p>
+                <p className="text-sm text-muted-foreground">
+                  Estoque atual: <span className="num">{ajuste.estoqueAtual.toFixed(2)}</span>
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Estoque físico confirmado</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="num"
+                  value={ajuste.estoqueAlvo}
+                  onChange={(event) =>
+                    setAjuste({
+                      ...ajuste,
+                      estoqueAlvo: Number(event.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+              {ajusteDelta > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Custo unitário da entrada (R$)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="num"
+                    value={ajuste.custoUnitario}
+                    onChange={(event) =>
+                      setAjuste({
+                        ...ajuste,
+                        custoUnitario: Number(event.target.value) || 0,
+                      })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    A quantidade adicionada será um novo lote; o custo médio será recalculado.
+                  </p>
+                </div>
+              )}
+              {ajusteDelta < 0 && (
+                <p className="rounded-md border p-3 text-sm text-muted-foreground">
+                  A redução consumirá os lotes mais antigos primeiro e registrará o custo FIFO e o
+                  motivo. O custo médio atual não será alterado pela saída.
+                </p>
+              )}
+              <div className="space-y-1.5">
+                <Label>Motivo do ajuste</Label>
+                <Textarea
+                  value={ajuste.motivo}
+                  onChange={(event) => setAjuste({ ...ajuste, motivo: event.target.value })}
+                  placeholder="Ex.: conferência física do estoque"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAjuste(null)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={
+                  ajustarEstoque.isPending || Math.abs(ajusteDelta) < 0.01 || !ajuste.motivo.trim()
+                }
+                onClick={() => ajustarEstoque.mutate(ajuste)}
+              >
+                {ajustarEstoque.isPending && <i className="fa-solid fa-circle-notch fa-spin" />}
+                Registrar ajuste
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
+
       <BarcodeCameraDialog
         open={cameraOpen}
         onOpenChange={setCameraOpen}
@@ -745,27 +927,47 @@ function Pecas() {
                   />
                 </>
               )}
-              <CampoNum
-                label="Estoque"
-                value={edit.estoque}
-                onChange={(v) => setEdit({ ...edit, estoque: v })}
-              />
+              {edit.id ? (
+                <div className="space-y-1.5">
+                  <Label>Estoque atual</Label>
+                  <Input type="number" className="num" value={edit.estoque} readOnly />
+                  <p className="text-xs text-muted-foreground">
+                    Use Ajustar estoque para corrigir o saldo com registro de lote e motivo.
+                  </p>
+                </div>
+              ) : (
+                <CampoNum
+                  label="Estoque inicial"
+                  value={edit.estoque}
+                  onChange={(v) => setEdit({ ...edit, estoque: v })}
+                />
+              )}
               <CampoNum
                 label="Estoque mínimo"
                 value={edit.estoque_minimo}
                 onChange={(v) => setEdit({ ...edit, estoque_minimo: v })}
               />
-              <CampoNum
-                label="Preço de custo"
-                value={edit.preco_custo}
-                onChange={(v) =>
-                  setEdit({
-                    ...edit,
-                    preco_custo: v,
-                    preco_venda: Number((v * (1 + edit.margem / 100)).toFixed(2)),
-                  })
-                }
-              />
+              {edit.id ? (
+                <div className="space-y-1.5">
+                  <Label>Custo médio ponderado</Label>
+                  <Input type="number" className="num" value={edit.preco_custo} readOnly />
+                  <p className="text-xs text-muted-foreground">
+                    Atualizado pelas entradas registradas em lote.
+                  </p>
+                </div>
+              ) : (
+                <CampoNum
+                  label="Custo unitário inicial (R$)"
+                  value={edit.preco_custo}
+                  onChange={(v) =>
+                    setEdit({
+                      ...edit,
+                      preco_custo: v,
+                      preco_venda: Number((v * (1 + edit.margem / 100)).toFixed(2)),
+                    })
+                  }
+                />
+              )}
               <CampoNum
                 label="Margem (%)"
                 value={edit.margem}

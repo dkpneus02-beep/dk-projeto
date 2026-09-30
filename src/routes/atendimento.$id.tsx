@@ -1288,9 +1288,13 @@ function FinalizarDialog({
   const desconto = pagamentoPix ? Math.round(pecasElegiveis * 0.25 * 100) / 100 : 0;
   const liquido = Math.max(bruto - desconto, 0);
   useEffect(() => {
-    if (pagamentos.length === 1 && pagamentos[0].valor !== liquido) {
-      setPagamentos((atual) => [{ ...atual[0], valor: liquido }]);
-    }
+    if (pagamentos.length !== 1 || pagamentos[0]?.valor === liquido) return;
+
+    setPagamentos((atual) => {
+      const unico = atual[0];
+      if (atual.length !== 1 || !unico) return atual;
+      return [{ ...unico, valor: liquido }];
+    });
   }, [liquido, pagamentos]);
   const somaPag = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
   const ok = Math.abs(somaPag - liquido) < 0.01;
