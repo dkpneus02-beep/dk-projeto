@@ -114,7 +114,6 @@ function Pecas() {
   const [tab, setTab] = useState("todos");
   const [edit, setEdit] = useState<PecaForm | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [descontoPixOpen, setDescontoPixOpen] = useState(false);
   const [entradaOpen, setEntradaOpen] = useState(false);
   const [entradaPecaId, setEntradaPecaId] = useState("");
   const [entradaQuantidade, setEntradaQuantidade] = useState(1);
@@ -199,12 +198,10 @@ function Pecas() {
     : 0;
 
   const abrirEditor = (form: PecaForm) => {
-    setDescontoPixOpen(false);
     setEdit(form);
   };
 
   const fecharEditor = () => {
-    setDescontoPixOpen(false);
     setEdit(null);
   };
 
@@ -238,7 +235,7 @@ function Pecas() {
   useEffect(() => {
     if (!editorAberto) return;
 
-    const abrirConfiguracaoPix = (event: KeyboardEvent) => {
+    const alternarDescontoPix = (event: KeyboardEvent) => {
       if (
         !event.altKey ||
         !event.shiftKey ||
@@ -250,11 +247,13 @@ function Pecas() {
       }
       event.preventDefault();
       event.stopImmediatePropagation();
-      setDescontoPixOpen(true);
+      setEdit((atual) =>
+        atual ? { ...atual, aceita_desconto_pix: !atual.aceita_desconto_pix } : atual,
+      );
     };
 
-    window.addEventListener("keydown", abrirConfiguracaoPix, true);
-    return () => window.removeEventListener("keydown", abrirConfiguracaoPix, true);
+    window.addEventListener("keydown", alternarDescontoPix, true);
+    return () => window.removeEventListener("keydown", alternarDescontoPix, true);
   }, [editorAberto]);
 
   const salvar = useMutation({
@@ -861,7 +860,7 @@ function Pecas() {
 
       {edit && (
         <Dialog open onOpenChange={fecharEditor}>
-          <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] grid-cols-1 overflow-y-auto sm:max-w-2xl">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
             <DialogHeader>
               <DialogTitle className="font-display text-2xl uppercase">
                 {edit.id ? "Editar item" : "Novo item"}
@@ -893,28 +892,27 @@ function Pecas() {
               </TabsList>
             </Tabs>
 
-            <div className="flex flex-col gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold">Desconto Pix de 25%</p>
-                <p className="text-sm text-muted-foreground">
-                  {edit.tipo === "pneu"
-                    ? "Desativado para pneus."
-                    : edit.aceita_desconto_pix
-                      ? "Ativo neste cadastro."
-                      : "Desativado neste cadastro."}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={edit.aceita_desconto_pix}
                 aria-keyshortcuts="Alt+Shift+T"
-                onClick={() => setDescontoPixOpen(true)}
-              >
-                <i className="fa-solid fa-percent" /> Configurar desconto
-                <kbd className="rounded border px-1.5 py-0.5 text-[10px]">Alt+Shift+T</kbd>
-              </Button>
-            </div>
+                onChange={(event) =>
+                  setEdit({ ...edit, aceita_desconto_pix: event.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 accent-primary"
+              />
+              <span>
+                <strong className="block">Aceita desconto Pix de 25%</strong>
+                <span className="block text-xs text-muted-foreground">
+                  Desmarque para óleo, pneus ou itens comprados fora do fornecedor.
+                </span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Atalho para alternar:{" "}
+                  <kbd className="rounded border px-1.5 py-0.5">Alt+Shift+T</kbd>
+                </span>
+              </span>
+            </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Campo
@@ -1175,45 +1173,6 @@ function Pecas() {
               </Button>
             </DialogFooter>
           </DialogContent>
-          <Dialog open={descontoPixOpen} onOpenChange={setDescontoPixOpen}>
-            <DialogContent className="grid-cols-1 sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="font-display text-xl uppercase">
-                  Desconto Pix desta peça
-                </DialogTitle>
-              </DialogHeader>
-              <label className="flex items-start gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-                <input
-                  type="checkbox"
-                  checked={edit.tipo !== "pneu" && edit.aceita_desconto_pix}
-                  disabled={edit.tipo === "pneu"}
-                  onChange={(event) =>
-                    setEdit({
-                      ...edit,
-                      aceita_desconto_pix: edit.tipo !== "pneu" && event.target.checked,
-                    })
-                  }
-                  className="mt-0.5 h-4 w-4 accent-primary"
-                />
-                <span>
-                  <strong className="block">Aceita desconto Pix de 25%</strong>
-                  <span className="text-xs text-muted-foreground">
-                    {edit.tipo === "pneu"
-                      ? "Pneus não recebem desconto Pix pelo cadastro."
-                      : "Desmarque para óleo ou itens comprados fora do fornecedor."}
-                  </span>
-                </span>
-              </label>
-              <p className="text-xs text-muted-foreground">
-                A alteração será salva junto com o item quando você clicar em Salvar.
-              </p>
-              <DialogFooter>
-                <Button type="button" onClick={() => setDescontoPixOpen(false)}>
-                  Concluído
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </Dialog>
       )}
     </AppShell>
