@@ -882,9 +882,54 @@ export type Database = {
           },
         ]
       }
+      peca_referencias: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          marca: string
+          observacao: string | null
+          peca_id: string
+          principal: boolean
+          referencia: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          marca: string
+          observacao?: string | null
+          peca_id: string
+          principal?: boolean
+          referencia: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          marca?: string
+          observacao?: string | null
+          peca_id?: string
+          principal?: boolean
+          referencia?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "peca_referencias_peca_id_fkey"
+            columns: ["peca_id"]
+            isOneToOne: false
+            referencedRelation: "pecas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pecas: {
         Row: {
           aceita_desconto_pix: boolean
+          aplicacao: string | null
           categoria: string
           construcao: string | null
           created_at: string
@@ -898,6 +943,7 @@ export type Database = {
           medida: string | null
           modelo_desenho: string | null
           nome: string
+          observacoes: string | null
           preco_custo: number
           preco_venda: number
           simbolo_velocidade: string | null
@@ -907,6 +953,7 @@ export type Database = {
         }
         Insert: {
           aceita_desconto_pix?: boolean
+          aplicacao?: string | null
           categoria?: string
           construcao?: string | null
           created_at?: string
@@ -920,6 +967,7 @@ export type Database = {
           medida?: string | null
           modelo_desenho?: string | null
           nome: string
+          observacoes?: string | null
           preco_custo?: number
           preco_venda?: number
           simbolo_velocidade?: string | null
@@ -929,6 +977,7 @@ export type Database = {
         }
         Update: {
           aceita_desconto_pix?: boolean
+          aplicacao?: string | null
           categoria?: string
           construcao?: string | null
           created_at?: string
@@ -942,6 +991,7 @@ export type Database = {
           medida?: string | null
           modelo_desenho?: string | null
           nome?: string
+          observacoes?: string | null
           preco_custo?: number
           preco_venda?: number
           simbolo_velocidade?: string | null
@@ -1073,6 +1123,39 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adicionar_entrada_estoque_com_custo: {
+        Args: { _peca_id: string; _preco_custo: number; _quantidade: number }
+        Returns: {
+          aceita_desconto_pix: boolean
+          aplicacao: string | null
+          categoria: string
+          construcao: string | null
+          created_at: string
+          deleted_at: string | null
+          estoque: number
+          estoque_minimo: number
+          id: string
+          indice_carga: string | null
+          marca: string | null
+          margem: number
+          medida: string | null
+          modelo_desenho: string | null
+          nome: string
+          observacoes: string | null
+          preco_custo: number
+          preco_venda: number
+          simbolo_velocidade: string | null
+          sku: string | null
+          tipo: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pecas"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       adicionar_entrada_estoque: {
         Args: { _peca_id: string; _quantidade: number }
         Returns: {

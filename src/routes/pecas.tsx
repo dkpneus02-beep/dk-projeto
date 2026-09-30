@@ -8,6 +8,7 @@ import { AppShell, PageHeader } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -17,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { brl, matches } from "@/lib/format";
+import { brl, matches, norm } from "@/lib/format";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import { BarcodeCameraDialog } from "@/components/BarcodeCameraDialog";
@@ -35,8 +36,49 @@ export const Route = createFileRoute("/pecas")({
 });
 
 type Peca = Tables<"pecas">;
+type PecaReferencia = Tables<"peca_referencias">;
 
-const vazio = {
+type ReferenciaForm = {
+  id?: string;
+  chave: string;
+  marca: string;
+  referencia: string;
+  observacao: string;
+  principal: boolean;
+};
+
+type PecaForm = {
+  id?: string;
+  sku: string;
+  nome: string;
+  marca: string;
+  tipo: string;
+  aceita_desconto_pix: boolean;
+  estoque: number;
+  estoque_minimo: number;
+  preco_custo: number;
+  margem: number;
+  preco_venda: number;
+  medida: string;
+  indice_carga: string;
+  simbolo_velocidade: string;
+  modelo_desenho: string;
+  construcao: string;
+  aplicacao: string;
+  observacoes: string;
+  referencias: ReferenciaForm[];
+};
+
+let referenciaChave = 0;
+const novaReferencia = (): ReferenciaForm => ({
+  chave: `referencia-${++referenciaChave}`,
+  marca: "",
+  referencia: "",
+  observacao: "",
+  principal: false,
+});
+
+const novoFormulario = (): PecaForm => ({
   sku: "",
   nome: "",
   marca: "",
@@ -52,17 +94,21 @@ const vazio = {
   simbolo_velocidade: "",
   modelo_desenho: "",
   construcao: "",
-};
+  aplicacao: "",
+  observacoes: "",
+  referencias: [novaReferencia()],
+});
 
 function Pecas() {
   const qc = useQueryClient();
   const [busca, setBusca] = useState("");
   const [tab, setTab] = useState("todos");
-  const [edit, setEdit] = useState<null | (typeof vazio & { id?: string })>(null);
+  const [edit, setEdit] = useState<PecaForm | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [entradaOpen, setEntradaOpen] = useState(false);
   const [entradaPecaId, setEntradaPecaId] = useState("");
   const [entradaQuantidade, setEntradaQuantidade] = useState(1);
+  const [entradaCusto, setEntradaCusto] = useState(0);
   const [favoritos, setFavoritos] = useState<string[]>([]);
 
   useEffect(() => {
@@ -88,21 +134,68 @@ function Pecas() {
     },
   });
 
+  const { data: referencias = [] } = useQuery({
+    queryKey: ["peca-referencias"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("peca_referencias")
+        .select("*")
+        .is("deleted_at", null)
+        .order("principal", { ascending: false })
+        .order("marca")
+        .order("referencia");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const referenciasPorPeca = useMemo(() => {
+    const agrupadas = new Map<string, PecaReferencia[]>();
+    referencias.forEach((referencia) => {
+      const atuais = agrupadas.get(referencia.peca_id) ?? [];
+      atuais.push(referencia);
+      agrupadas.set(referencia.peca_id, atuais);
+    });
+    return agrupadas;
+  }, [referencias]);
+
+  const referenciasEncontradas = (p: Peca) => {
+    return referenciasPorPeca.get(p.id) ?? [];
+  };
+
   const lista = useMemo(
     () =>
       (data ?? []).filter(
         (p) =>
           (tab === "todos" || (tab === "favoritos" ? favoritos.includes(p.id) : p.tipo === tab)) &&
-          matches(busca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
+          matches(busca, [
+            p.nome,
+            p.sku,
+            p.marca,
+            p.medida,
+            p.modelo_desenho,
+            ...(referenciasPorPeca.get(p.id) ?? []).flatMap((ref) => [
+              ref.marca,
+              ref.referencia,
+              ref.observacao,
+            ]),
+          ]),
       ),
-    [data, busca, tab, favoritos],
+    [data, busca, tab, favoritos, referenciasPorPeca],
   );
 
   const aplicarCodigo = (codigoBruto: string) => {
     const codigo = codigoBruto.trim();
     if (!codigo) return;
     setBusca(codigo);
-    const achada = (data ?? []).find((p) => p.sku?.trim().toLowerCase() === codigo.toLowerCase());
+    const codigoNormalizado = norm(codigo);
+    const achada = (data ?? []).find(
+      (p) =>
+        norm(p.sku) === codigoNormalizado ||
+        (referenciasPorPeca.get(p.id) ?? []).some((ref) =>
+          norm(ref.referencia).includes(codigoNormalizado),
+        ),
+    );
     if (achada) {
       toast.success(`Item encontrado: ${achada.nome}`);
       abrir(achada);
@@ -110,7 +203,7 @@ function Pecas() {
     }
 
     // Código novo: já abre o cadastro com o SKU preenchido, sem exigir redigitação.
-    setEdit({ ...vazio, sku: codigo });
+    setEdit({ ...novoFormulario(), sku: codigo });
     toast.info(`Código ${codigo} preenchido. Complete nome, preço e estoque para salvar.`);
   };
 
@@ -118,8 +211,31 @@ function Pecas() {
   useBarcodeScanner(aplicarCodigo);
 
   const salvar = useMutation({
-    mutationFn: async (p: typeof vazio & { id?: string }) => {
+    mutationFn: async (p: PecaForm) => {
       const sku = p.sku.trim();
+      const referenciasPreenchidas = p.referencias.filter(
+        (referencia) =>
+          referencia.marca.trim() || referencia.referencia.trim() || referencia.observacao.trim(),
+      );
+      const referenciasInvalidas = referenciasPreenchidas.filter(
+        (referencia) => !referencia.marca.trim() || !referencia.referencia.trim(),
+      );
+      if (referenciasInvalidas.length > 0) {
+        throw new Error("Preencha marca e referência ou remova a linha incompleta.");
+      }
+
+      const referenciasNormalizadas = new Set<string>();
+      for (const referencia of referenciasPreenchidas) {
+        const normalizada = norm(referencia.referencia);
+        if (referenciasNormalizadas.has(normalizada)) {
+          throw new Error(`A referência ${referencia.referencia.trim()} está repetida neste item.`);
+        }
+        referenciasNormalizadas.add(normalizada);
+      }
+      if (referenciasPreenchidas.filter((referencia) => referencia.principal).length > 1) {
+        throw new Error("Selecione no máximo uma referência principal.");
+      }
+
       if (sku) {
         const { data: duplicado, error: erroDuplicado } = await supabase
           .from("pecas")
@@ -150,16 +266,88 @@ function Pecas() {
         simbolo_velocidade: p.simbolo_velocidade || null,
         modelo_desenho: p.modelo_desenho || null,
         construcao: p.construcao || null,
+        aplicacao: p.aplicacao || null,
+        observacoes: p.observacoes || null,
       };
-      const { error } = p.id
-        ? await supabase.from("pecas").update(payload).eq("id", p.id)
-        : await supabase.from("pecas").insert(payload);
-      if (error) throw error;
+
+      const pecaResult = p.id
+        ? await supabase.from("pecas").update(payload).eq("id", p.id).select("id").single()
+        : await supabase.from("pecas").insert(payload).select("id").single();
+      if (pecaResult.error) throw pecaResult.error;
+      const pecaId = pecaResult.data.id;
+
+      const { data: referenciasAtuais, error: erroReferenciasAtuais } = await supabase
+        .from("peca_referencias")
+        .select("id")
+        .eq("peca_id", pecaId)
+        .is("deleted_at", null);
+      if (erroReferenciasAtuais) throw erroReferenciasAtuais;
+
+      // Marca as linhas atuais como inativas antes de reaplicar o conjunto
+      // editado. Isso evita conflitos ao trocar duas referências entre si e
+      // mantém os IDs existentes quando a linha continua no formulário.
+      if ((referenciasAtuais ?? []).length > 0) {
+        const { error } = await supabase
+          .from("peca_referencias")
+          .update({ deleted_at: new Date().toISOString(), principal: false })
+          .eq("peca_id", pecaId)
+          .is("deleted_at", null);
+        if (error) throw error;
+      }
+
+      const idsPorChave = new Map<string, string>();
+      for (const referencia of referenciasPreenchidas) {
+        const referenciaPayload = {
+          peca_id: pecaId,
+          marca: referencia.marca.trim(),
+          referencia: referencia.referencia.trim(),
+          observacao: referencia.observacao.trim() || null,
+          principal: false,
+          deleted_at: null,
+        };
+        const resultado = referencia.id
+          ? await supabase
+              .from("peca_referencias")
+              .update(referenciaPayload)
+              .eq("id", referencia.id)
+              .eq("peca_id", pecaId)
+          : await supabase.from("peca_referencias").insert(referenciaPayload).select("id").single();
+        if (resultado.error) throw resultado.error;
+        const referenciaId = referencia.id ?? resultado.data?.id;
+        if (!referenciaId) throw new Error("Não foi possível identificar a referência salva.");
+        idsPorChave.set(referencia.chave, referenciaId);
+      }
+
+      const principal = referenciasPreenchidas.find((referencia) => referencia.principal);
+      if (principal) {
+        const principalId = idsPorChave.get(principal.chave);
+        const { error } = await supabase
+          .from("peca_referencias")
+          .update({ principal: true })
+          .eq("id", principalId ?? "00000000-0000-0000-0000-000000000000")
+          .eq("peca_id", pecaId);
+        if (error) throw error;
+      }
+
+      const idsMantidos = new Set(
+        referenciasPreenchidas.map((referencia) => referencia.id).filter(Boolean),
+      );
+      const idsRemovidos = (referenciasAtuais ?? [])
+        .map((referencia) => referencia.id)
+        .filter((id) => !idsMantidos.has(id));
+      if (idsRemovidos.length > 0) {
+        const { error } = await supabase
+          .from("peca_referencias")
+          .update({ deleted_at: new Date().toISOString(), principal: false })
+          .in("id", idsRemovidos);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       toast.success("Item salvo");
       setEdit(null);
       void qc.invalidateQueries({ queryKey: ["pecas"] });
+      void qc.invalidateQueries({ queryKey: ["peca-referencias"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -169,9 +357,10 @@ function Pecas() {
       if (!entradaPecaId || entradaQuantidade <= 0) {
         throw new Error("Informe o item e uma quantidade maior que zero.");
       }
-      const { data: item, error } = await supabase.rpc("adicionar_entrada_estoque", {
+      const { data: item, error } = await supabase.rpc("adicionar_entrada_estoque_com_custo", {
         _peca_id: entradaPecaId,
         _quantidade: entradaQuantidade,
+        _preco_custo: Math.round(entradaCusto * 100) / 100,
       });
       if (error) throw error;
       return item;
@@ -181,6 +370,7 @@ function Pecas() {
       setEntradaOpen(false);
       setEntradaPecaId("");
       setEntradaQuantidade(1);
+      setEntradaCusto(0);
       void qc.invalidateQueries({ queryKey: ["pecas"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -197,29 +387,41 @@ function Pecas() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["pecas"] }),
   });
 
-  const abrir = (p?: Peca) =>
-    setEdit(
-      p
-        ? {
-            id: p.id,
-            sku: p.sku ?? "",
-            nome: p.nome,
-            marca: p.marca ?? "",
-            tipo: p.tipo,
-            aceita_desconto_pix: p.aceita_desconto_pix,
-            estoque: Number(p.estoque),
-            estoque_minimo: Number(p.estoque_minimo),
-            preco_custo: Number(p.preco_custo),
-            margem: Number(p.margem),
-            preco_venda: Number(p.preco_venda),
-            medida: p.medida ?? "",
-            indice_carga: p.indice_carga ?? "",
-            simbolo_velocidade: p.simbolo_velocidade ?? "",
-            modelo_desenho: p.modelo_desenho ?? "",
-            construcao: p.construcao ?? "",
-          }
-        : { ...vazio },
-    );
+  const abrir = (p?: Peca) => {
+    if (!p) {
+      setEdit(novoFormulario());
+      return;
+    }
+    const referenciasDaPeca = (referenciasPorPeca.get(p.id) ?? []).map((referencia) => ({
+      id: referencia.id,
+      chave: referencia.id,
+      marca: referencia.marca,
+      referencia: referencia.referencia,
+      observacao: referencia.observacao ?? "",
+      principal: referencia.principal,
+    }));
+    setEdit({
+      id: p.id,
+      sku: p.sku ?? "",
+      nome: p.nome,
+      marca: p.marca ?? "",
+      tipo: p.tipo,
+      aceita_desconto_pix: p.aceita_desconto_pix,
+      estoque: Number(p.estoque),
+      estoque_minimo: Number(p.estoque_minimo),
+      preco_custo: Number(p.preco_custo),
+      margem: Number(p.margem),
+      preco_venda: Number(p.preco_venda),
+      medida: p.medida ?? "",
+      indice_carga: p.indice_carga ?? "",
+      simbolo_velocidade: p.simbolo_velocidade ?? "",
+      modelo_desenho: p.modelo_desenho ?? "",
+      construcao: p.construcao ?? "",
+      aplicacao: p.aplicacao ?? "",
+      observacoes: p.observacoes ?? "",
+      referencias: referenciasDaPeca.length > 0 ? referenciasDaPeca : [novaReferencia()],
+    });
+  };
 
   return (
     <AppShell>
@@ -231,7 +433,7 @@ function Pecas() {
           <Button
             variant="outline"
             onClick={() => {
-              setEdit({ ...vazio });
+              setEdit(novoFormulario());
               setCameraOpen(true);
             }}
           >
@@ -283,6 +485,14 @@ function Pecas() {
                   <p className="text-xs text-muted-foreground">
                     {[p.sku, p.marca, p.medida, p.modelo_desenho].filter(Boolean).join(" · ")}
                   </p>
+                  {referenciasEncontradas(p).length > 0 && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">Referências:</span>{" "}
+                      {referenciasEncontradas(p)
+                        .map((referencia) => `${referencia.marca} ${referencia.referencia}`)
+                        .join(" · ")}
+                    </p>
+                  )}
                 </td>
                 <td className="num p-3">
                   {Number(p.estoque)}
@@ -361,15 +571,20 @@ function Pecas() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Escolha o item, informe a quantidade recebida e o sistema somará ao saldo atual sem
-            alterar preço ou cadastro.
+            Escolha o item, informe quantidade e custo da entrada. O saldo e o custo médio serão
+            atualizados e o lote ficará preservado.
           </p>
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Item do estoque</Label>
               <select
                 value={entradaPecaId}
-                onChange={(event) => setEntradaPecaId(event.target.value)}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  setEntradaPecaId(id);
+                  const peca = (data ?? []).find((item) => item.id === id);
+                  setEntradaCusto(Number(peca?.preco_custo ?? 0));
+                }}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="">Selecione uma peça ou pneu</option>
@@ -391,6 +606,20 @@ function Pecas() {
                 onChange={(event) => setEntradaQuantidade(Number(event.target.value) || 0)}
                 className="num"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Custo unitário da entrada (R$)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={entradaCusto}
+                onChange={(event) => setEntradaCusto(Number(event.target.value) || 0)}
+                className="num"
+              />
+              <p className="text-xs text-muted-foreground">
+                O sistema criará um lote e recalculará o custo médio ponderado do item.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -481,6 +710,12 @@ function Pecas() {
                 value={edit.marca}
                 onChange={(v) => setEdit({ ...edit, marca: v })}
               />
+              <CampoArea
+                label="Aplicação"
+                value={edit.aplicacao}
+                onChange={(v) => setEdit({ ...edit, aplicacao: v })}
+                placeholder="Veículos, motores ou aplicações compatíveis"
+              />
               {edit.tipo === "pneu" && (
                 <>
                   <Campo
@@ -565,6 +800,127 @@ function Pecas() {
               </div>
             </div>
 
+            <CampoArea
+              label="Observações da peça"
+              value={edit.observacoes}
+              onChange={(v) => setEdit({ ...edit, observacoes: v })}
+              placeholder="Informações adicionais sobre este cadastro"
+            />
+
+            <section
+              aria-labelledby="referencias-title"
+              className="space-y-3 rounded-md border p-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 id="referencias-title" className="font-medium">
+                    Referências equivalentes
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Cadastre códigos de marcas diferentes para a mesma peça. A linha é opcional.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setEdit({ ...edit, referencias: [...edit.referencias, novaReferencia()] })
+                  }
+                >
+                  <i className="fa-solid fa-plus" /> Adicionar referência
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                {edit.referencias.map((referencia, indice) => (
+                  <div key={referencia.chave} className="rounded-md bg-muted/30 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Referência {indice + 1}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Remover referência ${indice + 1}`}
+                        onClick={() =>
+                          setEdit({
+                            ...edit,
+                            referencias: edit.referencias.filter(
+                              (item) => item.chave !== referencia.chave,
+                            ),
+                          })
+                        }
+                      >
+                        <i className="fa-solid fa-trash-can text-destructive" /> Remover
+                      </Button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Campo
+                        label="Marca da referência"
+                        value={referencia.marca}
+                        onChange={(valor) =>
+                          setEdit({
+                            ...edit,
+                            referencias: edit.referencias.map((item) =>
+                              item.chave === referencia.chave ? { ...item, marca: valor } : item,
+                            ),
+                          })
+                        }
+                      />
+                      <Campo
+                        label="Referência / código"
+                        value={referencia.referencia}
+                        onChange={(valor) =>
+                          setEdit({
+                            ...edit,
+                            referencias: edit.referencias.map((item) =>
+                              item.chave === referencia.chave
+                                ? { ...item, referencia: valor }
+                                : item,
+                            ),
+                          })
+                        }
+                      />
+                      <Campo
+                        label="Observação da referência"
+                        value={referencia.observacao}
+                        onChange={(valor) =>
+                          setEdit({
+                            ...edit,
+                            referencias: edit.referencias.map((item) =>
+                              item.chave === referencia.chave
+                                ? { ...item, observacao: valor }
+                                : item,
+                            ),
+                          })
+                        }
+                      />
+                      <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={referencia.principal}
+                          onChange={(evento) =>
+                            setEdit({
+                              ...edit,
+                              referencias: edit.referencias.map((item) => ({
+                                ...item,
+                                principal:
+                                  item.chave === referencia.chave ? evento.target.checked : false,
+                              })),
+                            })
+                          }
+                          className="h-4 w-4 accent-primary"
+                        />
+                        Referência principal
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setEdit(null)}>
                 Cancelar
@@ -596,6 +952,29 @@ function Campo({
     <div className="space-y-1.5">
       <Label>{label}</Label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function CampoArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-1.5 sm:col-span-2">
+      <Label>{label}</Label>
+      <Textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
     </div>
   );
 }
