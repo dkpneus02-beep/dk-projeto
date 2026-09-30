@@ -1244,6 +1244,7 @@ type Servico = {
 
 type PecaDescontoPix = {
   id: string;
+  nome: string;
   aceita_desconto_pix: boolean;
 };
 
@@ -1276,12 +1277,39 @@ function FinalizarDialog({
   }) => void;
 }) {
   const bruto = servicos.reduce((s, x) => s + Number(x.valor), 0);
-  const pecasElegiveis = servicos
-    .filter(
-      (servico) =>
-        servico.peca_id && pecas.find((peca) => peca.id === servico.peca_id)?.aceita_desconto_pix,
-    )
+  const [descontoPorServico, setDescontoPorServico] = useState<Record<string, boolean>>({});
+  const [configurarDescontoOpen, setConfigurarDescontoOpen] = useState(false);
+  const elegivelNoCatalogo = (servico: Servico) =>
+    Boolean(
+      servico.peca_id && pecas.find((peca) => peca.id === servico.peca_id)?.aceita_desconto_pix,
+    );
+  const incluiNoDesconto = (servico: Servico) =>
+    descontoPorServico[servico.id] ?? elegivelNoCatalogo(servico);
+  const pecasDaOs = servicos.filter((servico) => Boolean(servico.peca_id));
+  const pecasElegiveis = pecasDaOs
+    .filter(incluiNoDesconto)
     .reduce((s, servico) => s + Number(servico.preco_peca ?? 0), 0);
+
+  useEffect(() => {
+    const abrirConfiguracaoPix = (event: KeyboardEvent) => {
+      if (
+        !event.altKey ||
+        !event.shiftKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.code !== "KeyT"
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setConfigurarDescontoOpen(true);
+    };
+
+    window.addEventListener("keydown", abrirConfiguracaoPix, true);
+    return () => window.removeEventListener("keydown", abrirConfiguracaoPix, true);
+  }, []);
+
   const [pagamentos, setPagamentos] = useState([{ forma: "Dinheiro", valor: bruto, parcelas: 1 }]);
   const pagamentoPix =
     pagamentos.length > 0 && pagamentos.every((pagamento) => pagamento.forma === "PIX");
@@ -1347,7 +1375,7 @@ function FinalizarDialog({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] grid-cols-1 overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="font-display text-2xl uppercase">
             Finalizar atendimento
@@ -1382,12 +1410,24 @@ function FinalizarDialog({
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Desconto Pix automático</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Desconto Pix</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-keyshortcuts="Alt+Shift+T"
+                onClick={() => setConfigurarDescontoOpen(true)}
+              >
+                <i className="fa-solid fa-percent" /> Ajustar por peça
+                <kbd className="rounded border px-1.5 py-0.5 text-[10px]">Alt+Shift+T</kbd>
+              </Button>
+            </div>
             <p className="num font-semibold">{brl(desconto)}</p>
             <p className="text-xs text-muted-foreground">
-              25% somente nas peças elegíveis e apenas quando todos os pagamentos forem Pix.
+              25% nas peças selecionadas, somente quando todos os pagamentos forem Pix.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -1528,6 +1568,63 @@ function FinalizarDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <Dialog open={configurarDescontoOpen} onOpenChange={setConfigurarDescontoOpen}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] grid-cols-1 overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl uppercase">
+              Desconto Pix desta OS
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Marque as peças que podem receber 25% de desconto nesta OS. Isso não altera o cadastro;
+            o desconto só é aplicado se todos os pagamentos forem Pix.
+          </p>
+          {pecasDaOs.length === 0 ? (
+            <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+              Esta OS não tem peças vinculadas para configurar o desconto.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {pecasDaOs.map((servico) => {
+                const peca = pecas.find((item) => item.id === servico.peca_id);
+                const valorPeca = Math.max(Number(servico.preco_peca ?? 0), 0);
+                const marcada = incluiNoDesconto(servico);
+                const descontoItem = marcada ? Math.round(valorPeca * 0.25 * 100) / 100 : 0;
+
+                return (
+                  <label
+                    key={servico.id}
+                    className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={marcada}
+                      onChange={(event) =>
+                        setDescontoPorServico((atual) => ({
+                          ...atual,
+                          [servico.id]: event.target.checked,
+                        }))
+                      }
+                      className="mt-1 h-4 w-4 accent-primary"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <strong className="block">{peca?.nome ?? servico.nome}</strong>
+                      <span className="block text-xs text-muted-foreground">
+                        Peça: {brl(valorPeca)} · Desconto possível: {brl(descontoItem)}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <DialogFooter>
+            <Button type="button" onClick={() => setConfigurarDescontoOpen(false)}>
+              Concluído
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
