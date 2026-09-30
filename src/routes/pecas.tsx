@@ -860,7 +860,7 @@ function Pecas() {
 
       {edit && (
         <Dialog open onOpenChange={fecharEditor}>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <DialogContent className="flex max-h-[90vh] flex-col overflow-y-auto sm:max-w-xl">
             <DialogHeader>
               <DialogTitle className="font-display text-2xl uppercase">
                 {edit.id ? "Editar item" : "Novo item"}
@@ -930,6 +930,119 @@ function Pecas() {
                 value={edit.marca}
                 onChange={(v) => setEdit({ ...edit, marca: v })}
               />
+              <section
+                aria-labelledby="referencias-title"
+                className="space-y-3 rounded-md border p-3 sm:col-span-2"
+              >
+                <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 bg-background/95 py-2 backdrop-blur">
+                  <div>
+                    <h3 id="referencias-title" className="font-medium">
+                      Referências equivalentes ({edit.referencias.length})
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Cadastre códigos de marcas diferentes para a mesma peça. A linha é opcional.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setEdit({ ...edit, referencias: [...edit.referencias, novaReferencia()] })
+                    }
+                  >
+                    <i className="fa-solid fa-plus" /> Adicionar referência
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {edit.referencias.map((referencia, indice) => (
+                    <div key={referencia.chave} className="rounded-md bg-muted/30 p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Referência {indice + 1}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Remover referência ${indice + 1}`}
+                          onClick={() =>
+                            setEdit({
+                              ...edit,
+                              referencias: edit.referencias.filter(
+                                (item) => item.chave !== referencia.chave,
+                              ),
+                            })
+                          }
+                        >
+                          <i className="fa-solid fa-trash-can text-destructive" /> Remover
+                        </Button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Campo
+                          label="Marca da referência"
+                          value={referencia.marca}
+                          onChange={(valor) =>
+                            setEdit({
+                              ...edit,
+                              referencias: edit.referencias.map((item) =>
+                                item.chave === referencia.chave ? { ...item, marca: valor } : item,
+                              ),
+                            })
+                          }
+                        />
+                        <Campo
+                          label="Referência / código"
+                          value={referencia.referencia}
+                          onChange={(valor) =>
+                            setEdit({
+                              ...edit,
+                              referencias: edit.referencias.map((item) =>
+                                item.chave === referencia.chave
+                                  ? { ...item, referencia: valor }
+                                  : item,
+                              ),
+                            })
+                          }
+                        />
+                        <Campo
+                          label="Observação da referência"
+                          value={referencia.observacao}
+                          onChange={(valor) =>
+                            setEdit({
+                              ...edit,
+                              referencias: edit.referencias.map((item) =>
+                                item.chave === referencia.chave
+                                  ? { ...item, observacao: valor }
+                                  : item,
+                              ),
+                            })
+                          }
+                        />
+                        <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={referencia.principal}
+                            onChange={(evento) =>
+                              setEdit({
+                                ...edit,
+                                referencias: edit.referencias.map((item) => ({
+                                  ...item,
+                                  principal:
+                                    item.chave === referencia.chave ? evento.target.checked : false,
+                                })),
+                              })
+                            }
+                            className="h-4 w-4 accent-primary"
+                          />
+                          Referência principal
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
               <CampoArea
                 label="Aplicação"
                 value={edit.aplicacao}
@@ -1046,120 +1159,6 @@ function Pecas() {
               onChange={(v) => setEdit({ ...edit, observacoes: v })}
               placeholder="Informações adicionais sobre este cadastro"
             />
-
-            <section
-              aria-labelledby="referencias-title"
-              className="space-y-3 rounded-md border p-3"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 id="referencias-title" className="font-medium">
-                    Referências equivalentes
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Cadastre códigos de marcas diferentes para a mesma peça. A linha é opcional.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setEdit({ ...edit, referencias: [...edit.referencias, novaReferencia()] })
-                  }
-                >
-                  <i className="fa-solid fa-plus" /> Adicionar referência
-                </Button>
-              </div>
-
-              <div className="space-y-3">
-                {edit.referencias.map((referencia, indice) => (
-                  <div key={referencia.chave} className="rounded-md bg-muted/30 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-muted-foreground">
-                        Referência {indice + 1}
-                      </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Remover referência ${indice + 1}`}
-                        onClick={() =>
-                          setEdit({
-                            ...edit,
-                            referencias: edit.referencias.filter(
-                              (item) => item.chave !== referencia.chave,
-                            ),
-                          })
-                        }
-                      >
-                        <i className="fa-solid fa-trash-can text-destructive" /> Remover
-                      </Button>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Campo
-                        label="Marca da referência"
-                        value={referencia.marca}
-                        onChange={(valor) =>
-                          setEdit({
-                            ...edit,
-                            referencias: edit.referencias.map((item) =>
-                              item.chave === referencia.chave ? { ...item, marca: valor } : item,
-                            ),
-                          })
-                        }
-                      />
-                      <Campo
-                        label="Referência / código"
-                        value={referencia.referencia}
-                        onChange={(valor) =>
-                          setEdit({
-                            ...edit,
-                            referencias: edit.referencias.map((item) =>
-                              item.chave === referencia.chave
-                                ? { ...item, referencia: valor }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                      <Campo
-                        label="Observação da referência"
-                        value={referencia.observacao}
-                        onChange={(valor) =>
-                          setEdit({
-                            ...edit,
-                            referencias: edit.referencias.map((item) =>
-                              item.chave === referencia.chave
-                                ? { ...item, observacao: valor }
-                                : item,
-                            ),
-                          })
-                        }
-                      />
-                      <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={referencia.principal}
-                          onChange={(evento) =>
-                            setEdit({
-                              ...edit,
-                              referencias: edit.referencias.map((item) => ({
-                                ...item,
-                                principal:
-                                  item.chave === referencia.chave ? evento.target.checked : false,
-                              })),
-                            })
-                          }
-                          className="h-4 w-4 accent-primary"
-                        />
-                        Referência principal
-                      </label>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
 
             <DialogFooter>
               <Button variant="outline" onClick={fecharEditor}>
