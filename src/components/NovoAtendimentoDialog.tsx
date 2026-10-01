@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -30,6 +30,9 @@ const AVARIAS = [
   "Escapamento furado",
 ];
 
+type FotoEnviada = { url: string; deleteUrl: string | null };
+type FalhaEnvioFoto = { file: File; mensagem: string };
+
 export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -47,6 +50,8 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
   const [avarias, setAvarias] = useState<string[]>([]);
   const [arquivos, setArquivos] = useState<File[]>([]);
   const [fotoInputKey, setFotoInputKey] = useState(0);
+  const [falhasFotos, setFalhasFotos] = useState<FalhaEnvioFoto[]>([]);
+  const fotosEnviadas = useRef(new Map<File, FotoEnviada>());
   const previews = useMemo(
     () => arquivos.map((file) => ({ file, url: URL.createObjectURL(file) })),
     [arquivos],
@@ -59,13 +64,32 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
   const cpfInvalido = onlyDigits(form.cliente_cpf).length > 0 && !isValidCPF(form.cliente_cpf);
 
   const criar = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ continuarSemFalhas }: { continuarSemFalhas: boolean }) => {
       const atendimentoId = crypto.randomUUID();
-      const fotos: Array<{ url: string; deleteUrl: string | null }> = [];
+      const falhas: FalhaEnvioFoto[] = [];
+      const falhasAnteriores = continuarSemFalhas ? falhasFotos : [];
       for (const [index, file] of arquivos.entries()) {
-        const foto = await uploadVistoriaImgBB(file, `vistoria-${form.placa}-${index + 1}`);
-        fotos.push({ url: foto.url, deleteUrl: foto.deleteUrl });
+        if (fotosEnviadas.current.has(file)) continue;
+        if (falhasAnteriores.some((falha) => falha.file === file)) continue;
+        try {
+          const foto = await uploadVistoriaImgBB(file, `vistoria-${form.placa}-${index + 1}`);
+          fotosEnviadas.current.set(file, { url: foto.url, deleteUrl: foto.deleteUrl });
+        } catch (error) {
+          falhas.push({
+            file,
+            mensagem: error instanceof Error ? error.message : "Não foi possível enviar esta foto.",
+          });
+        }
       }
+      setFalhasFotos(falhas);
+      if (falhas.length > 0 && !continuarSemFalhas) {
+        return { status: "falha-upload" as const, falhas };
+      }
+
+      const fotos = arquivos.flatMap((file) => {
+        const foto = fotosEnviadas.current.get(file);
+        return foto ? [{ url: foto.url, deleteUrl: foto.deleteUrl }] : [];
+      });
       const { error } = await supabase.from("atendimentos").insert({
         id: atendimentoId,
         placa: form.placa.toUpperCase(),
@@ -82,17 +106,36 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
         fotos,
       });
       if (error) throw error;
-      return { id: atendimentoId, fotosPublicadas: fotos.length };
+      return {
+        status: "aberto" as const,
+        id: atendimentoId,
+        fotosPublicadas: fotos.length,
+        fotosIgnoradas: falhasAnteriores.length + falhas.length,
+      };
     },
-    onSuccess: ({ id, fotosPublicadas }) => {
+    onSuccess: (resultado) => {
+      if (resultado.status === "falha-upload") {
+        toast.error(
+          "Uma ou mais fotos não foram enviadas. Tente novamente ou abra sem as fotos que falharam.",
+        );
+        return;
+      }
       toast.success(
-        fotosPublicadas > 0
-          ? `Atendimento aberto. ${fotosPublicadas} foto(s) publicada(s) no ImgBB.`
+        resultado.fotosPublicadas > 0
+          ? `Atendimento aberto. ${resultado.fotosPublicadas} foto(s) publicada(s) no ImgBB.`
           : "Atendimento aberto",
       );
+      if (resultado.fotosIgnoradas > 0) {
+        toast.warning(
+          `A OS foi aberta sem ${resultado.fotosIgnoradas} foto(s) que não puderam ser enviadas.`,
+        );
+      }
       void qc.invalidateQueries();
       setOpen(false);
-      void navigate({ to: "/atendimento/$id", params: { id } });
+      setArquivos([]);
+      setFalhasFotos([]);
+      fotosEnviadas.current.clear();
+      void navigate({ to: "/atendimento/$id", params: { id: resultado.id } });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -208,6 +251,7 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
                 capture="environment"
                 className="sr-only"
                 onChange={(e) => {
+                  setFalhasFotos([]);
                   setArquivos((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
                   setFotoInputKey((key) => key + 1);
                 }}
@@ -222,6 +266,7 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
                 multiple
                 className="sr-only"
                 onChange={(e) => {
+                  setFalhasFotos([]);
                   setArquivos((prev) => [...prev, ...Array.from(e.target.files ?? [])]);
                   setFotoInputKey((key) => key + 1);
                 }}
@@ -243,9 +288,15 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
                   <button
                     type="button"
                     className="absolute right-1 top-1 rounded-full bg-destructive px-2 py-1 text-xs text-destructive-foreground shadow"
-                    onClick={() =>
-                      setArquivos((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
-                    }
+                    onClick={() => {
+                      const fotoEnviada = fotosEnviadas.current.get(file);
+                      if (fotoEnviada?.deleteUrl) {
+                        void fetch(fotoEnviada.deleteUrl, { method: "GET" }).catch(() => {});
+                      }
+                      fotosEnviadas.current.delete(file);
+                      setArquivos((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+                      setFalhasFotos((prev) => prev.filter((falha) => falha.file !== file));
+                    }}
                     aria-label={`Remover foto ${index + 1}`}
                   >
                     <i className="fa-solid fa-xmark" />
@@ -261,9 +312,29 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
           </p>
         </Field>
 
+        {falhasFotos.length > 0 && (
+          <div
+            role="alert"
+            className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm"
+          >
+            <p className="font-semibold">Não foi possível enviar estas fotos:</p>
+            <ul className="list-inside list-disc space-y-1">
+              {falhasFotos.map(({ file, mensagem }, index) => (
+                <li key={`${file.name}-${file.lastModified}-${index}`}>
+                  <strong>{file.name}:</strong> {mensagem}
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              As fotos enviadas com sucesso serão mantidas. Você pode tentar novamente ou abrir a OS
+              sem as fotos que falharam.
+            </p>
+          </div>
+        )}
+
         <DialogFooter>
           <Button
-            onClick={() => criar.mutate()}
+            onClick={() => criar.mutate({ continuarSemFalhas: false })}
             disabled={!form.placa || !form.cliente_nome || cpfInvalido || criar.isPending}
           >
             {criar.isPending && <i className="fa-solid fa-circle-notch fa-spin" />}
@@ -271,8 +342,20 @@ export function NovoAtendimentoDialog({ lotado }: { lotado: boolean }) {
               ? arquivos.length > 0
                 ? "Publicando fotos e abrindo atendimento..."
                 : "Abrindo atendimento..."
-              : "Abrir atendimento"}
+              : falhasFotos.length > 0
+                ? "Tentar enviar fotos novamente"
+                : "Abrir atendimento"}
           </Button>
+          {falhasFotos.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!form.placa || !form.cliente_nome || cpfInvalido || criar.isPending}
+              onClick={() => criar.mutate({ continuarSemFalhas: true })}
+            >
+              Abrir OS sem as fotos que falharam
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

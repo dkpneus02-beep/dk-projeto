@@ -32,6 +32,7 @@ import { printReceipt } from "@/lib/receipt";
 import { uploadVistoriaImgBB } from "@/lib/imgbb";
 import { normalizarFotos, type VistoriaFoto } from "@/lib/vistoria";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
+import { BarcodeCameraDialog } from "@/components/BarcodeCameraDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,11 +69,20 @@ function AtendimentoPage() {
   const [fotoInputKey, setFotoInputKey] = useState(0);
   const [fotoSelecionada, setFotoSelecionada] = useState<string | null>(null);
   const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
+  const [cameraServicoId, setCameraServicoId] = useState<string | null>(null);
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
     servicos: Parameters<typeof printReceipt>[1];
     pagamentos: Parameters<typeof printReceipt>[2];
   }>(null);
+
+  const aplicarCodigoNaBuscaPeca = (codigo: string) => {
+    if (!cameraServicoId) return;
+    setFiltrosPeca((atual) => {
+      const filtro = atual[cameraServicoId] ?? { busca: "", tipo: "todos" };
+      return { ...atual, [cameraServicoId]: { ...filtro, busca: codigo, tipo: "todos" } };
+    });
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["atendimento", id],
@@ -542,17 +552,32 @@ function AtendimentoPage() {
                                 <SelectItem value="peca">Peças e insumos</SelectItem>
                               </SelectContent>
                             </Select>
-                            <Input
-                              value={filtroPeca.busca}
-                              onChange={(e) =>
-                                setFiltrosPeca((atual) => ({
-                                  ...atual,
-                                  [s.id]: { ...filtroPeca, busca: e.target.value },
-                                }))
-                              }
-                              placeholder="Buscar por nome, SKU, código, marca ou medida..."
-                              aria-label="Buscar item do estoque"
-                            />
+                            <div className="flex min-w-0 gap-2">
+                              <Input
+                                value={filtroPeca.busca}
+                                onChange={(e) =>
+                                  setFiltrosPeca((atual) => ({
+                                    ...atual,
+                                    [s.id]: { ...filtroPeca, busca: e.target.value },
+                                  }))
+                                }
+                                placeholder="Buscar por nome, SKU, código, marca ou medida..."
+                                aria-label="Buscar item do estoque"
+                                className="min-w-0 flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0"
+                                aria-label="Ler código de barras pela câmera"
+                                title="Ler código de barras pela câmera"
+                                onClick={() => setCameraServicoId(s.id)}
+                              >
+                                <i className="fa-solid fa-camera" />
+                                <span className="hidden sm:inline">Ler</span>
+                              </Button>
+                            </div>
                           </div>
                           <Select
                             value={s.peca_id ?? "none"}
@@ -963,6 +988,13 @@ function AtendimentoPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+      <BarcodeCameraDialog
+        open={cameraServicoId !== null}
+        onOpenChange={(open) => {
+          if (!open) setCameraServicoId(null);
+        }}
+        onDetected={aplicarCodigoNaBuscaPeca}
+      />
     </AppShell>
   );
 }

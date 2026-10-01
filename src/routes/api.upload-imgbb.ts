@@ -8,7 +8,7 @@ export const Route = createFileRoute("/api/upload-imgbb")({
     middleware: [requireSupabaseAuth],
     handlers: {
       POST: async ({ request }) => {
-        const apiKey = process.env.IMGBB_API_KEY;
+        const apiKey = process.env["IMGBB_API_KEY"];
         if (!apiKey) {
           return Response.json(
             { error: "O upload de fotos ainda não foi configurado no servidor." },
@@ -38,15 +38,35 @@ export const Route = createFileRoute("/api/upload-imgbb")({
         payload.append("image", image, image.name || "vistoria.jpg");
         if (typeof name === "string" && name.trim()) payload.append("name", name.trim());
 
-        const response = await fetch("https://api.imgbb.com/1/upload", {
-          method: "POST",
-          body: payload,
-        });
-        const result = (await response.json()) as {
+        let response: Response;
+        try {
+          response = await fetch("https://api.imgbb.com/1/upload", {
+            method: "POST",
+            body: payload,
+          });
+        } catch {
+          return Response.json(
+            {
+              error:
+                "Não foi possível conectar ao serviço de fotos. Verifique a internet e tente novamente.",
+            },
+            { status: 502 },
+          );
+        }
+
+        let result: {
           success?: boolean;
           data?: { display_url?: string; url?: string; delete_url?: string };
           error?: { message?: string };
         };
+        try {
+          result = (await response.json()) as typeof result;
+        } catch {
+          return Response.json(
+            { error: "O serviço de fotos retornou uma resposta inválida. Tente novamente." },
+            { status: 502 },
+          );
+        }
 
         if (!response.ok || !result.success || !(result.data?.display_url || result.data?.url)) {
           return Response.json(

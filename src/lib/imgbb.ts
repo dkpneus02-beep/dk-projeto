@@ -8,21 +8,33 @@ type UploadResponse = { url: string; deleteUrl: string | null };
 async function reduzirImagem(file: File): Promise<File> {
   if (!file.type.startsWith("image/") || typeof createImageBitmap === "undefined") return file;
 
-  const bitmap = await createImageBitmap(file);
-  const escala = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * escala));
-  canvas.height = Math.max(1, Math.round(bitmap.height * escala));
-  const context = canvas.getContext("2d");
-  if (!context) return file;
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    // Alguns formatos de câmera (por exemplo, HEIC em certos navegadores) não
+    // podem ser decodificados pelo canvas. Deixe o servidor/ImgBB responder
+    // com um erro visível, em vez de interromper a abertura da OS aqui.
+    return file;
+  }
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY),
-  );
-  if (!blob) return file;
-  return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  try {
+    const escala = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * escala));
+    canvas.height = Math.max(1, Math.round(bitmap.height * escala));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY),
+    );
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  } finally {
+    bitmap.close();
+  }
 }
 
 export async function uploadVistoriaImgBB(file: File, nome: string): Promise<UploadResponse> {
