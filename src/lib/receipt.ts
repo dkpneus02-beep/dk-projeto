@@ -59,17 +59,20 @@ export function buildReceiptHtml(
     padding: 6mm 4mm;
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
+    font-weight: 600;
     color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-  h1 { font-size: 15px; text-align: center; margin: 0 0 2px; text-transform: uppercase; }
+  h1 { font-size: 15px; font-weight: 800; text-align: center; margin: 0 0 2px; text-transform: uppercase; }
   .center { text-align: center; }
-  .muted { color: #444; }
-  hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+  .muted { color: #000; font-weight: 600; }
+  hr { border: none; border-top: 2px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 1px 0; vertical-align: top; }
+  td { padding: 1px 0; vertical-align: top; font-weight: 600; }
   td.num { text-align: right; white-space: nowrap; }
-  .total { font-size: 14px; font-weight: bold; }
-  .foot { margin-top: 8px; text-align: center; font-size: 11px; }
+  .total { font-size: 14px; font-weight: 800; }
+  .foot { margin-top: 8px; text-align: center; font-size: 11px; font-weight: 600; }
   @media print {
     .no-print { display: none; }
   }
