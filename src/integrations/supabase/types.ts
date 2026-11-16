@@ -71,51 +71,60 @@ export type Database = {
           atendimento_id: string
           concluido_at: string | null
           created_at: string
+          desconto_percentual: number | null
           garantia_km: number | null
           id: string
           iniciado_at: string | null
           mao_de_obra: number
           mecanico_id: string | null
           nome: string
+          nome_peca_snapshot: string | null
           peca_id: string | null
           preco_peca: number
           quantidade: number
           retorno_meses: number
           status: string
+          tipo_item: string
           valor: number
         }
         Insert: {
           atendimento_id: string
           concluido_at?: string | null
           created_at?: string
+          desconto_percentual?: number | null
           garantia_km?: number | null
           id?: string
           iniciado_at?: string | null
           mao_de_obra?: number
           mecanico_id?: string | null
           nome: string
+          nome_peca_snapshot?: string | null
           peca_id?: string | null
           preco_peca?: number
           quantidade?: number
           retorno_meses?: number
           status?: string
+          tipo_item?: string
           valor?: number
         }
         Update: {
           atendimento_id?: string
           concluido_at?: string | null
           created_at?: string
+          desconto_percentual?: number | null
           garantia_km?: number | null
           id?: string
           iniciado_at?: string | null
           mao_de_obra?: number
           mecanico_id?: string | null
           nome?: string
+          nome_peca_snapshot?: string | null
           peca_id?: string | null
           preco_peca?: number
           quantidade?: number
           retorno_meses?: number
           status?: string
+          tipo_item?: string
           valor?: number
         }
         Relationships: [
@@ -463,6 +472,9 @@ export type Database = {
           horario_fechamento: string
           id: boolean
           nome_oficina: string
+          pix_chave: string
+          pix_cidade: string
+          pix_nome_recebedor: string
           telefone: string
         }
         Insert: {
@@ -473,6 +485,9 @@ export type Database = {
           horario_fechamento?: string
           id?: boolean
           nome_oficina?: string
+          pix_chave?: string
+          pix_cidade?: string
+          pix_nome_recebedor?: string
           telefone?: string
         }
         Update: {
@@ -483,6 +498,9 @@ export type Database = {
           horario_fechamento?: string
           id?: boolean
           nome_oficina?: string
+          pix_chave?: string
+          pix_cidade?: string
+          pix_nome_recebedor?: string
           telefone?: string
         }
         Relationships: []
@@ -854,6 +872,7 @@ export type Database = {
           forma: string
           id: string
           parcelas: number
+          pago: boolean
           valor: number
         }
         Insert: {
@@ -862,6 +881,7 @@ export type Database = {
           forma: string
           id?: string
           parcelas?: number
+          pago?: boolean
           valor: number
         }
         Update: {
@@ -870,6 +890,7 @@ export type Database = {
           forma?: string
           id?: string
           parcelas?: number
+          pago?: boolean
           valor?: number
         }
         Relationships: [
@@ -981,6 +1002,7 @@ export type Database = {
           aceita_desconto_pix: boolean
           aplicacao: string | null
           categoria: string
+          cadastro_pendente: boolean
           construcao: string | null
           created_at: string
           deleted_at: string | null
@@ -1005,6 +1027,7 @@ export type Database = {
           aceita_desconto_pix?: boolean
           aplicacao?: string | null
           categoria?: string
+          cadastro_pendente?: boolean
           construcao?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -1029,6 +1052,7 @@ export type Database = {
           aceita_desconto_pix?: boolean
           aplicacao?: string | null
           categoria?: string
+          cadastro_pendente?: boolean
           construcao?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -1274,6 +1298,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      adicionar_peca_rapida_atendimento: {
+        Args: {
+          _atendimento_id: string
+          _desconto_percentual?: number
+          _nome: string
+          _preco_unitario: number
+          _quantidade: number
+        }
+        Returns: Json
+      }
       baixar_pecas_atendimento: {
         Args: { _atendimento_id: string }
         Returns: undefined
@@ -1281,6 +1315,15 @@ export type Database = {
       can_view_atendimento: {
         Args: { _atendimento_id: string }
         Returns: boolean
+      }
+      concluir_cadastro_peca_rapida: {
+        Args: {
+          _custo_unitario_entrada?: number
+          _estoque_alvo: number
+          _motivo?: string
+          _peca_id: string
+        }
+        Returns: Json
       }
       criar_notificacao_interna: {
         Args: {
@@ -1317,7 +1360,7 @@ export type Database = {
         Args: {
           _atendimento_id: string
           _data_retorno_manual?: string
-          _desconto: number
+          _descontos?: Json
           _necessita_retorno?: boolean
           _pagamentos: Json
         }
@@ -1333,6 +1376,10 @@ export type Database = {
       iniciar_atendimento_orcamento: {
         Args: { _orcamento_id: string }
         Returns: string
+      }
+      marcar_atendimento_pago: {
+        Args: { _atendimento_id: string }
+        Returns: Json
       }
       limpar_orcamentos_expirados: { Args: never; Returns: number }
       mecanico_id_permitido: {

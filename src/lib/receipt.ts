@@ -1,4 +1,6 @@
-import { brl, d, dt } from "@/lib/format";
+import QRCode from "qrcode";
+import { brl, d, dt, whatsappLink } from "@/lib/format";
+import { buildPixPayload } from "@/lib/pix";
 
 export type ReciboAtendimento = {
   numero: number;
@@ -15,21 +17,24 @@ export type ReciboAtendimento = {
 };
 
 export type ReciboServico = { nome: string; valor: number; quantidade?: number };
-export type ReciboPagamento = { forma: string; valor: number; parcelas: number };
-
+export type ReciboPagamento = { forma: string; valor: number; parcelas: number; pago?: boolean };
 export type ReciboConfig = {
   nome_oficina: string;
   endereco: string;
   telefone: string;
   cnpj: string;
+  pix_chave?: string;
+  pix_nome_recebedor?: string;
+  pix_cidade?: string;
 };
 
-/** Monta o HTML do cupom (80mm) usado tanto para impressão térmica quanto para tela/PDF. */
+/** Monta o HTML do cupom em largura térmica de 80mm. */
 export function buildReceiptHtml(
   atendimento: ReciboAtendimento,
   servicos: ReciboServico[],
   pagamentos: ReciboPagamento[],
   config: ReciboConfig,
+  pix?: { payload: string; valor: number; chave: string; whatsappUrl: string; qrDataUrl: string },
 ): string {
   const bruto = servicos.reduce((s, x) => s + Number(x.valor), 0);
   const linhasServicos = servicos
@@ -41,45 +46,43 @@ export function buildReceiptHtml(
   const linhasPagamentos = pagamentos
     .map(
       (p) =>
-        `<tr><td>${escapeHtml(p.forma)}${p.parcelas > 1 ? ` (${p.parcelas}x)` : ""}</td><td class="num">${brl(p.valor)}</td></tr>`,
+        `<tr><td>${escapeHtml(p.forma)}${p.parcelas > 1 ? ` (${p.parcelas}x)` : ""}${p.pago === false ? " · pendente" : ""}</td><td class="num">${brl(p.valor)}</td></tr>`,
     )
     .join("");
+  const pixSection = pix
+    ? `<hr /><div class="pix center"><strong>PIX PENDENTE: ${brl(pix.valor)}</strong><br/><img class="qr" src="${pix.qrDataUrl}" alt="QR Code Pix no valor de ${brl(pix.valor)}"/><p>Abra o app do banco e escaneie o QR Code.</p><p>Chave Pix: ${escapeHtml(pix.chave)}</p><p class="no-print">Atalho Alt+P: copiar a chave Pix e abrir o WhatsApp.</p></div>`
+    : "";
 
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Recibo OS #${atendimento.numero}</title>
 <style>
   @page { size: 80mm auto; margin: 0; }
   * { box-sizing: border-box; }
-  body {
-    width: 80mm;
-    margin: 0 auto;
-    padding: 6mm 4mm;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-    color: #000;
-  }
+  body { width: 80mm; margin: 0 auto; padding: 5mm 4mm; font-family: Arial, sans-serif; font-size: 11px; color: #000; }
   h1 { font-size: 15px; text-align: center; margin: 0 0 2px; text-transform: uppercase; }
   .center { text-align: center; }
-  .muted { color: #444; }
+  .muted { color: #333; }
   hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 1px 0; vertical-align: top; }
+  td { padding: 2px 0; vertical-align: top; }
   td.num { text-align: right; white-space: nowrap; }
   .total { font-size: 14px; font-weight: bold; }
-  .foot { margin-top: 8px; text-align: center; font-size: 11px; }
-  @media print {
-    .no-print { display: none; }
-  }
+  .foot { margin-top: 8px; text-align: center; font-size: 10px; }
+  .pix { padding: 3mm 0; font-size: 11px; }
+  .qr { display: block; width: 42mm; height: 42mm; margin: 3mm auto; image-rendering: pixelated; }
+  .no-print button { margin: 3px; padding: 7px 10px; font: inherit; }
+  @media print { .no-print { display: none !important; } body { width: 80mm; } }
 </style>
 </head>
 <body>
   <h1>${escapeHtml(config.nome_oficina || "DK Auto Center")}</h1>
   <p class="center muted">
     ${config.endereco ? escapeHtml(config.endereco) + "<br/>" : ""}
-    ${config.telefone ? "Tel: " + escapeHtml(config.telefone) + " " : ""}
+    ${config.telefone ? "Tel: " + escapeHtml(config.telefone) + "<br/>" : ""}
     ${config.cnpj ? "CNPJ: " + escapeHtml(config.cnpj) : ""}
   </p>
   <hr />
@@ -104,17 +107,48 @@ export function buildReceiptHtml(
   <hr />
   <p class="muted">FORMA DE PAGAMENTO</p>
   <table>${linhasPagamentos}</table>
+  ${pixSection}
   <hr />
   ${atendimento.garantia_ate ? `<p class="center">Garantia válida até ${d(atendimento.garantia_ate)}</p><hr />` : ""}
-  <p class="foot">
-    Encerrado em ${dt(atendimento.finalizado_at)}<br/>
-    Obrigado pela preferência!
-  </p>
+  <p class="foot">Encerrado em ${dt(atendimento.finalizado_at)}<br/>Obrigado pela preferência!</p>
   <p class="center no-print" style="margin-top:12px;">
-    <button onclick="window.print()" style="font-family:inherit;padding:6px 12px;">Imprimir</button>
+    <button onclick="window.print()">Imprimir</button>
+    ${pix ? `<button id="pix-whatsapp" type="button">Copiar Pix e abrir WhatsApp (Alt+P)</button>` : ""}
   </p>
+  ${
+    pix
+      ? `<script>
+    const pixKey = ${safeScriptString(pix.chave)};
+    const whatsappUrl = ${safeScriptString(pix.whatsappUrl)};
+    async function copyPixAndOpenWhatsApp() {
+      window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+      try {
+        await navigator.clipboard.writeText(pixKey);
+        const button = document.getElementById("pix-whatsapp");
+        if (button) button.textContent = "Chave Pix copiada — cole no WhatsApp";
+      } catch {
+        window.prompt("Copie a chave Pix:", pixKey);
+      }
+    }
+    document.getElementById("pix-whatsapp")?.addEventListener("click", copyPixAndOpenWhatsApp);
+    window.addEventListener("keydown", (event) => {
+      if (event.altKey && !event.ctrlKey && !event.metaKey && event.code === "KeyP") {
+        event.preventDefault();
+        void copyPixAndOpenWhatsApp();
+      }
+    });
+  </script>`
+      : ""
+  }
 </body>
 </html>`;
+}
+
+function safeScriptString(value: string): string {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 function escapeHtml(v: string): string {
@@ -122,21 +156,68 @@ function escapeHtml(v: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-/** Abre o cupom em uma nova aba pronto para impressão térmica (80mm) ou salvar como PDF. */
-export function printReceipt(
+/** Abre o recibo; usa apenas um QR offline da parcela Pix ainda não paga. */
+export async function printReceipt(
   atendimento: ReciboAtendimento,
   servicos: ReciboServico[],
   pagamentos: ReciboPagamento[],
   config: ReciboConfig,
-) {
-  const html = buildReceiptHtml(atendimento, servicos, pagamentos, config);
-  const win = window.open("", "_blank", "width=420,height=680");
-  if (!win) return;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  win.focus();
+  targetWindow?: Window | null,
+): Promise<boolean> {
+  const win =
+    targetWindow === undefined ? window.open("", "_blank", "width=420,height=760") : targetWindow;
+  if (!win) return false;
+  const pixPendente = pagamentos
+    .filter(
+      (pagamento) =>
+        pagamento.forma.toLocaleLowerCase("pt-BR") === "pix" && pagamento.pago === false,
+    )
+    .reduce((soma, pagamento) => soma + Number(pagamento.valor), 0);
+
+  try {
+    let pixData:
+      | { payload: string; valor: number; chave: string; whatsappUrl: string; qrDataUrl: string }
+      | undefined;
+    if (pixPendente > 0 && config.pix_chave?.trim()) {
+      const pix = {
+        chave: config.pix_chave,
+        valor: Math.round(pixPendente * 100) / 100,
+        nomeRecebedor: config.pix_nome_recebedor || config.nome_oficina || "DK AUTO CENTER",
+        cidade: config.pix_cidade || "SALGUEIRO",
+        txid: `OS${atendimento.numero}`,
+      };
+      const payload = buildPixPayload(pix);
+      const qrDataUrl = await QRCode.toDataURL(payload, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        width: 512,
+        color: { dark: "#000000", light: "#FFFFFF" },
+      });
+      const mensagem = `Olá ${atendimento.cliente_nome}, segue a cobrança Pix de ${brl(pixPendente)} referente à OS #${atendimento.numero} da DK Auto Center. A chave Pix está copiada.`;
+      pixData = {
+        payload,
+        valor: pixPendente,
+        chave: pix.chave,
+        qrDataUrl,
+        whatsappUrl: atendimento.cliente_telefone
+          ? whatsappLink(atendimento.cliente_telefone, mensagem)
+          : `https://wa.me/?text=${encodeURIComponent(mensagem)}`,
+      };
+    }
+    const html = buildReceiptHtml(atendimento, servicos, pagamentos, config, pixData);
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    return true;
+  } catch (error) {
+    win.document.body.textContent =
+      error instanceof Error ? error.message : "Não foi possível gerar o recibo Pix.";
+    win.focus();
+    return false;
+  }
 }

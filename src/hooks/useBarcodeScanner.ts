@@ -1,44 +1,55 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Leitores de código de barras USB/Bluetooth funcionam como teclado:
- * disparam os dígitos muito rápido (poucos ms entre teclas) e finalizam
- * com Enter. Este hook escuta o teclado global, acumula os caracteres
- * enquanto o ritmo for "rápido demais para ser digitação humana" e
- * chama onScan quando detecta o Enter final.
- *
- * Não interfere com digitação normal em inputs (ritmo humano é mais lento
- * que o limiar configurado), então pode ficar sempre ativo na tela.
+ * Leitores USB/Bluetooth digitam o código rapidamente e normalmente encerram
+ * a leitura com Enter. O hook ignora digitação humana lenta e limpa buffers
+ * incompletos para não transformar texto antigo em uma leitura posterior.
  */
 export function useBarcodeScanner(onScan: (codigo: string) => void, enabled = true) {
-  const buffer = useRef("");
-  const lastTime = useRef(0);
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
 
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
-    const LIMIAR_MS = 40; // intervalo típico entre teclas de um leitor físico
+    const LIMIAR_MS = 40;
     const MIN_LEN = 4;
+    const MAX_LEN = 128;
+    let buffer = "";
+    let lastTime = 0;
 
-    const handler = (e: KeyboardEvent) => {
-      const now = Date.now();
-      const gap = now - lastTime.current;
-      lastTime.current = now;
+    const limpar = () => {
+      buffer = "";
+      lastTime = 0;
+    };
 
-      if (e.key === "Enter") {
-        const codigo = buffer.current.trim();
-        buffer.current = "";
+    const handler = (event: KeyboardEvent) => {
+      if (event.isComposing || event.repeat || event.ctrlKey || event.metaKey || event.altKey) {
+        limpar();
+        return;
+      }
+
+      // O Shift pode anteceder letras maiúsculas enviadas por alguns leitores.
+      if (event.key === "Shift" || event.key === "CapsLock") return;
+
+      const agora = performance.now();
+      if (event.key === "Enter") {
+        const codigo = agora - lastTime <= LIMIAR_MS ? buffer.trim() : "";
+        limpar();
         if (codigo.length >= MIN_LEN) onScanRef.current(codigo);
         return;
       }
 
-      if (e.key.length === 1) {
-        // Se o intervalo entre teclas foi longo, é digitação humana: reinicia o buffer.
-        if (gap > LIMIAR_MS && buffer.current) buffer.current = "";
-        buffer.current += e.key;
+      if (event.key.length !== 1) {
+        limpar();
+        return;
       }
+
+      if (lastTime && agora - lastTime > LIMIAR_MS) buffer = "";
+      buffer += event.key;
+      lastTime = agora;
+
+      if (buffer.length > MAX_LEN) limpar();
     };
 
     window.addEventListener("keydown", handler);

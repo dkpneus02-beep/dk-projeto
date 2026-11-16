@@ -42,7 +42,7 @@ function Historico() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("atendimentos")
-        .select("*, atendimento_servicos(nome, valor, peca_id, quantidade, pecas(nome)), pagamentos(forma, valor, parcelas)")
+        .select("*, atendimento_servicos(nome, nome_peca_snapshot, tipo_item, valor, peca_id, quantidade, pecas(nome)), pagamentos(forma, valor, parcelas, pago)")
         .is("deleted_at", null)
         .order("entrada_at", { ascending: false })
         .limit(500);
@@ -171,10 +171,11 @@ function Historico() {
                   <td className="p-3 text-muted-foreground">
                     {(a.atendimento_servicos ?? [])
                       .map((s) => {
-                        const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number };
-                        return item.pecas?.nome
-                          ? `${s.nome} · ${item.pecas.nome}${item.quantidade && item.quantidade !== 1 ? ` x${item.quantidade}` : ""}`
+                        const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number; nome_peca_snapshot?: string | null; tipo_item?: string; peca_id?: string | null };
+                        const nome = item.tipo_item === "peca" || item.peca_id
+                          ? item.nome_peca_snapshot ?? item.pecas?.nome ?? s.nome
                           : s.nome;
+                        return `${nome}${item.quantidade && item.quantidade !== 1 ? ` x${item.quantidade}` : ""}`;
                       })
                       .join(", ") || "—"}
                   </td>
@@ -201,11 +202,11 @@ function Historico() {
                               printReceipt(
                                 {
                                   numero: a.numero,
-                                  placa: a.placa,
+                                  placa: a.placa ?? "",
                                   modelo: a.modelo,
                                   fabricante: a.fabricante,
                                   km: a.km,
-                                  cliente_nome: a.cliente_nome,
+                                  cliente_nome: a.cliente_nome ?? "",
                                   cliente_telefone: a.cliente_telefone,
                                   desconto: Number(a.desconto ?? 0),
                                   total: Number(a.total),
@@ -213,9 +214,12 @@ function Historico() {
                                   garantia_ate: a.garantia_ate,
                                 },
                                 (a.atendimento_servicos ?? []).map((s) => {
-                                  const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number };
+                                  const item = s as typeof s & { pecas?: { nome: string } | null; quantidade?: number; nome_peca_snapshot?: string | null; tipo_item?: string; peca_id?: string | null };
+                                  const nome = item.tipo_item === "peca" || item.peca_id
+                                    ? item.nome_peca_snapshot ?? item.pecas?.nome ?? s.nome
+                                    : s.nome;
                                   return {
-                                    nome: item.pecas?.nome ? `${s.nome} · ${item.pecas.nome}` : s.nome,
+                                    nome,
                                     valor: Number(s.valor),
                                     quantidade: Number(item.quantidade ?? 1),
                                   };
@@ -224,12 +228,16 @@ function Historico() {
                                   forma: p.forma,
                                   valor: Number(p.valor),
                                   parcelas: p.parcelas,
+                                  pago: p.pago,
                                 })),
                                 {
                                   nome_oficina: config?.nome_oficina || "DK Auto Center",
                                   endereco: config?.endereco ?? "",
                                   telefone: config?.telefone ?? "",
                                   cnpj: config?.cnpj ?? "",
+                                  pix_chave: config?.pix_chave ?? "32801574000155",
+                                  pix_nome_recebedor: config?.pix_nome_recebedor ?? "DK AUTO CENTER",
+                                  pix_cidade: config?.pix_cidade ?? "SALGUEIRO",
                                 },
                               )
                             }

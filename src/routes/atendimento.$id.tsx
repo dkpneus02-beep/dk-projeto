@@ -25,7 +25,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { brl, d, dt, FORMAS_PAGAMENTO, matches, statusLabel, whatsappLink } from "@/lib/format";
+import {
+  brl,
+  d,
+  dt,
+  FORMAS_PAGAMENTO,
+  matches,
+  norm,
+  statusLabel,
+  whatsappLink,
+} from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
 import { isGerente, canEditServico } from "@/lib/permissions";
 import { printReceipt } from "@/lib/receipt";
@@ -33,9 +42,9 @@ import { uploadVistoriaImgBB } from "@/lib/imgbb";
 import { normalizarFotos, type VistoriaFoto } from "@/lib/vistoria";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import { BarcodeCameraDialog } from "@/components/BarcodeCameraDialog";
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -63,25 +72,38 @@ function AtendimentoPage() {
   const { role, user, nome, mecanicoId } = useAuth();
   const gerente = isGerente(role);
   const [finalizando, setFinalizando] = useState(false);
+  const [pecaRapidaOpen, setPecaRapidaOpen] = useState(false);
+  const [pecaRapida, setPecaRapida] = useState({ nome: "", quantidade: 1, precoUnitario: 0, descontoPercentual: 20 });
   const [editarDadosOpen, setEditarDadosOpen] = useState(false);
   const [novaAvaria, setNovaAvaria] = useState("");
   const [fotoBusy, setFotoBusy] = useState(false);
   const [fotoInputKey, setFotoInputKey] = useState(0);
   const [fotoSelecionada, setFotoSelecionada] = useState<string | null>(null);
-  const [filtrosPeca, setFiltrosPeca] = useState<Record<string, { busca: string; tipo: string }>>({});
+  const [filtrosPeca, setFiltrosPeca] = useState<
+    Record<string, { busca: string; tipo: string; codigoExato?: string | null }>
+  >({});
   const [cameraServicoId, setCameraServicoId] = useState<string | null>(null);
+  const [scannerServicoId, setScannerServicoId] = useState<string | null>(null);
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
     servicos: Parameters<typeof printReceipt>[1];
     pagamentos: Parameters<typeof printReceipt>[2];
   }>(null);
 
-  const aplicarCodigoNaBuscaPeca = (codigo: string) => {
-    if (!cameraServicoId) return;
+  const aplicarCodigoNaBuscaPeca = (codigo: string, servicoId = cameraServicoId) => {
+    const busca = codigo.trim();
+    if (!servicoId || !busca) return;
     setFiltrosPeca((atual) => {
-      const filtro = atual[cameraServicoId] ?? { busca: "", tipo: "todos" };
-      return { ...atual, [cameraServicoId]: { ...filtro, busca: codigo, tipo: "todos" } };
+      const filtro = atual[servicoId] ?? { busca: "", tipo: "todos" };
+      return {
+        ...atual,
+        [servicoId]: { ...filtro, busca, tipo: "todos", codigoExato: norm(busca) },
+      };
     });
+  };
+
+  const aplicarCodigoDoLeitor = (codigo: string) => {
+    if (scannerServicoId) aplicarCodigoNaBuscaPeca(codigo, scannerServicoId);
   };
 
   const { data, isLoading } = useQuery({
@@ -138,6 +160,19 @@ function AtendimentoPage() {
     enabled: !!role,
   });
 
+  const { data: referenciasPecas = [] } = useQuery({
+    queryKey: ["peca-referencias-atendimento", role],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("peca_referencias")
+        .select("peca_id, marca, referencia, observacao")
+        .is("deleted_at", null);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: gerente,
+  });
+
   const { data: config } = useQuery({
     queryKey: ["configuracoes"],
     queryFn: async () => {
@@ -150,10 +185,31 @@ function AtendimentoPage() {
     () => [...(data?.atendimento_servicos ?? [])].sort((a, b) => a.nome.localeCompare(b.nome)),
     [data],
   );
+  const referenciasPecaPorId = useMemo(() => {
+    const agrupadas = new Map<
+      string,
+      { marca: string; referencia: string; observacao: string | null }[]
+    >();
+    referenciasPecas.forEach((referencia) => {
+      const atuais = agrupadas.get(referencia.peca_id) ?? [];
+      atuais.push(referencia);
+      agrupadas.set(referencia.peca_id, atuais);
+    });
+    return agrupadas;
+  }, [referenciasPecas]);
   const total = servicos.reduce((s, x) => s + Number(x.valor), 0);
   const todosConcluidos = servicos.length > 0 && servicos.every((s) => s.status === "concluido");
   const finalizado = data?.status === "finalizado";
   const aguardandoGerente = data?.status === "aguardando_gerente";
+  const servicoScanner = servicos.find((servico) => servico.id === scannerServicoId);
+  const scannerHabilitado = Boolean(
+    role &&
+    !finalizado &&
+    !cameraServicoId &&
+    servicoScanner &&
+    (gerente || canEditServico(role, servicoScanner.mecanico_id, mecanicoId)),
+  );
+  useBarcodeScanner(aplicarCodigoDoLeitor, scannerHabilitado);
 
   const marcarPronto = useMutation({
     mutationFn: async () => {
@@ -243,6 +299,46 @@ function AtendimentoPage() {
     },
   });
 
+  const adicionarPecaRapida = useMutation({
+    mutationFn: async () => {
+      if (!pecaRapida.nome.trim()) throw new Error("Informe o nome da peça como deve aparecer na nota.");
+      if (pecaRapida.quantidade <= 0 || pecaRapida.precoUnitario < 0) {
+        throw new Error("Informe quantidade maior que zero e preço unitário válido.");
+      }
+      if (pecaRapida.descontoPercentual < 0 || pecaRapida.descontoPercentual > 100) {
+        throw new Error("O desconto deve ficar entre 0% e 100%.");
+      }
+      const { error } = await supabase.rpc("adicionar_peca_rapida_atendimento", {
+        _atendimento_id: id,
+        _nome: pecaRapida.nome.trim(),
+        _quantidade: pecaRapida.quantidade,
+        _preco_unitario: pecaRapida.precoUnitario,
+        _desconto_percentual: pecaRapida.descontoPercentual,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Peça provisória adicionada à OS. Configure o cadastro e confira o estoque depois.");
+      setPecaRapidaOpen(false);
+      setPecaRapida({ nome: "", quantidade: 1, precoUnitario: 0, descontoPercentual: 20 });
+      void qc.invalidateQueries({ queryKey: ["atendimento", id] });
+      void qc.invalidateQueries({ queryKey: ["pecas"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const marcarAtendimentoPago = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc("marcar_atendimento_pago", { _atendimento_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Recebimento registrado no caixa.");
+      void qc.invalidateQueries();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   if (isLoading || !data) {
     return (
       <AppShell>
@@ -298,6 +394,47 @@ function AtendimentoPage() {
     toast.success("Foto removida da vistoria.");
   };
 
+  const gerarRecibo = async (marcarComoPago: boolean) => {
+    if (!reciboPergunta) return;
+    const win = window.open("", "_blank", "width=420,height=760");
+    if (!win) {
+      toast.error("Permita a abertura da janela para gerar a nota.");
+      return;
+    }
+    win.document.write("<p style='font:16px Arial;padding:24px'>Preparando a nota…</p>");
+    try {
+      if (marcarComoPago) await marcarAtendimentoPago.mutateAsync();
+      const pagamentos = reciboPergunta.pagamentos.map((pagamento) => ({
+        ...pagamento,
+        pago: marcarComoPago,
+      }));
+      const reciboGerado = await printReceipt(
+        reciboPergunta.atendimento,
+        reciboPergunta.servicos,
+        pagamentos,
+        {
+          nome_oficina: config?.nome_oficina || "DK Auto Center",
+          endereco: config?.endereco ?? "",
+          telefone: config?.telefone ?? "",
+          cnpj: config?.cnpj ?? "",
+          pix_chave: config?.pix_chave ?? "32801574000155",
+          pix_nome_recebedor: config?.pix_nome_recebedor ?? "DK AUTO CENTER",
+          pix_cidade: config?.pix_cidade ?? "SALGUEIRO",
+        },
+        win,
+      );
+      if (!reciboGerado) {
+        toast.error("Não foi possível preparar a nota. Confira a configuração Pix e tente novamente.");
+        return;
+      }
+      setReciboPergunta(null);
+      void navigate({ to: "/patio" });
+    } catch (error) {
+      win.document.body.textContent = error instanceof Error ? error.message : "Não foi possível gerar a nota.";
+      toast.error(error instanceof Error ? error.message : "Não foi possível registrar o pagamento.");
+    }
+  };
+
   return (
     <AppShell>
       <PageHeader
@@ -347,8 +484,26 @@ function AtendimentoPage() {
             <p className="font-semibold">
               Finalizado em {dt(data.finalizado_at)} · Total {brl(data.total)}
             </p>
+            <p className="mt-1 text-sm font-medium">
+              {(data.pagamentos ?? []).some((pagamento) => pagamento.pago === false)
+                ? "Pagamento pendente — ainda não lançado no caixa"
+                : "Pagamento recebido"}
+            </p>
             <GarantiaTag ate={data.garantia_ate} km={data.garantia_km} kmEntrada={data.km} />
           </div>
+          {gerente && (data.pagamentos ?? []).some((pagamento) => pagamento.pago === false) && (
+            <ConfirmActionDialog
+              trigger={
+                <Button disabled={marcarAtendimentoPago.isPending}>
+                  <i className="fa-solid fa-cash-register" /> Confirmar recebimento
+                </Button>
+              }
+              title="Confirmar recebimento da OS"
+              description={<>Confirma que recebeu <strong className="text-foreground">{brl(data.total)}</strong>? Os pagamentos serão lançados no caixa aberto.</>}
+              confirmLabel="Sim, registrar no caixa"
+              onConfirm={() => marcarAtendimentoPago.mutateAsync()}
+            />
+          )}
           <Button variant="outline" asChild>
             <a
               href={whatsappLink(
@@ -367,19 +522,49 @@ function AtendimentoPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <section className="space-y-6">
           <div className="card-surface p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-display text-xl font-bold uppercase">Serviços</h2>
-              <span className="num text-sm text-muted-foreground">Total dos serviços: {brl(total)}</span>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-display text-xl font-bold uppercase">Serviços e peças</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="num text-sm text-muted-foreground">Total dos serviços: {brl(total)}</span>
+                {!finalizado && gerente && (
+                  <Button type="button" variant="outline" onClick={() => setPecaRapidaOpen(true)}>
+                    <i className="fa-solid fa-bolt" /> Peça rápida
+                  </Button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3">
               {servicos.map((s) => {
                 const filtroPeca = filtrosPeca[s.id] ?? { busca: "", tipo: "todos" };
-                const pecasFiltradas = (pecas ?? []).filter(
-                  (p) =>
-                    (filtroPeca.tipo === "todos" || p.tipo === filtroPeca.tipo || p.categoria === filtroPeca.tipo) &&
-                    matches(filtroPeca.busca, [p.nome, p.sku, p.marca, p.medida, p.modelo_desenho]),
-                );
+                const pecasFiltradas = (pecas ?? []).filter((p) => {
+                  if (p.cadastro_pendente) return false;
+                  const referenciaPeca = referenciasPecaPorId.get(p.id) ?? [];
+                  const correspondeAoCodigo = filtroPeca.codigoExato
+                    ? norm(p.sku) === filtroPeca.codigoExato ||
+                      referenciaPeca.some(
+                        (referencia) => norm(referencia.referencia) === filtroPeca.codigoExato,
+                      )
+                    : matches(filtroPeca.busca, [
+                        p.nome,
+                        p.sku,
+                        p.marca,
+                        p.medida,
+                        p.modelo_desenho,
+                        ...referenciaPeca.flatMap((referencia) => [
+                          referencia.marca,
+                          referencia.referencia,
+                          referencia.observacao,
+                        ]),
+                      ]);
+                  return (
+                    (filtroPeca.tipo === "todos" ||
+                      p.tipo === filtroPeca.tipo ||
+                      p.categoria === filtroPeca.tipo) &&
+                    correspondeAoCodigo
+                  );
+                });
+                const produtoVinculado = (pecas ?? []).find((produto) => produto.id === s.peca_id);
                 const statusTone =
                   s.status === "concluido"
                     ? "border-l-success bg-success/5"
@@ -393,7 +578,10 @@ function AtendimentoPage() {
                       ? "fa-screwdriver-wrench"
                       : "fa-hourglass-half";
                 return (
-                <div key={s.id} className={`overflow-hidden rounded-lg border border-l-4 bg-card p-4 shadow-sm ${statusTone}`}>
+                <div
+                  key={s.id}
+                  className={`min-w-0 overflow-hidden rounded-lg border border-l-4 bg-card p-4 shadow-sm ${statusTone}`}
+                >
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b pb-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -411,8 +599,17 @@ function AtendimentoPage() {
                         </span>
                       </div>
                       {s.peca_id && (
-                        <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                          <p><i className="fa-solid fa-box-open mr-1" /><strong>Produto do estoque:</strong> {(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "item do estoque"}</p>
+                        <div className="mt-1 min-w-0 space-y-0.5 text-xs text-muted-foreground">
+                          <p className="break-words">
+                            <i className="fa-solid fa-box-open mr-1" />
+                            <strong>{produtoVinculado?.cadastro_pendente ? "Peça provisória (sem estoque configurado):" : "Produto do estoque:"}</strong>{" "}
+                            {s.nome_peca_snapshot ?? produtoVinculado?.nome ?? "item do estoque"}
+                          </p>
+                          {produtoVinculado?.cadastro_pendente && (
+                            <p className="rounded border border-amber-500/40 bg-amber-500/10 p-2 font-semibold text-amber-800">
+                              Cadastro e contagem física pendentes. Esta peça não baixará estoque nem custo até o gerente concluir o cadastro.
+                            </p>
+                          )}
                           <p><strong>Quantidade:</strong> {Number(s.quantidade || 1)} · <strong>Valor registrado:</strong> {brl(s.valor)}</p>
                         </div>
                       )}
@@ -529,7 +726,9 @@ function AtendimentoPage() {
                         />
                         <p className="text-xs font-semibold text-primary">Total: <span className="num">{brl(s.valor)}</span></p>
                       </div>
-                      <div className="grid gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[1fr_120px]">
+                      <div
+                        className="grid min-w-0 gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[1fr_120px]"
+                      >
                         <div className="space-y-1.5">
                           <Label>Produto/peça/óleo/pneu usado</Label>
                         <div className="space-y-2">
@@ -558,8 +757,16 @@ function AtendimentoPage() {
                                 onChange={(e) =>
                                   setFiltrosPeca((atual) => ({
                                     ...atual,
-                                    [s.id]: { ...filtroPeca, busca: e.target.value },
+                                    [s.id]: {
+                                      ...filtroPeca,
+                                      busca: e.target.value,
+                                      codigoExato: null,
+                                    },
                                   }))
+                                }
+                                onFocus={() => setScannerServicoId(s.id)}
+                                onBlur={() =>
+                                  setScannerServicoId((atual) => (atual === s.id ? null : atual))
                                 }
                                 placeholder="Buscar por nome, SKU, código, marca ou medida..."
                                 aria-label="Buscar item do estoque"
@@ -593,19 +800,34 @@ function AtendimentoPage() {
                             });
                           }}
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Peça/óleo/pneu usado (opcional)" />
+                          <SelectTrigger className="min-w-0 max-w-full">
+                            <SelectValue
+                              className="min-w-0 flex-1 truncate"
+                              placeholder="Peça/óleo/pneu usado (opcional)"
+                            />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent
+                            className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]"
+                          >
                             <SelectItem value="none">Sem peça vinculada</SelectItem>
                             {pecasFiltradas.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.nome} · {p.tipo === "pneu" ? "pneu" : "peça/insumo"} · estoque {Number(p.estoque)} · {brl(p.preco_venda)}
+                              <SelectItem
+                                key={p.id}
+                                value={p.id}
+                                className="min-w-0 whitespace-normal"
+                              >
+                                <span className="block min-w-0 max-w-full break-words">
+                                  {p.nome} · {p.tipo === "pneu" ? "pneu" : "peça/insumo"} ·
+                                  estoque {Number(p.estoque)} · {brl(p.preco_venda)}
+                                </span>
                               </SelectItem>
                             ))}
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground">
+                            {scannerServicoId === s.id
+                              ? "Leitor USB pronto: bipa o código para filtrar os itens."
+                              : "Clique no campo e use o leitor USB, ou leia pela câmera."}{" "}
                             {pecasFiltradas.length} item(ns) encontrado(s) · a baixa ocorre somente na finalização da OS
                           </p>
                         </div>
@@ -881,7 +1103,7 @@ function AtendimentoPage() {
             {finalizado && (
               <>
                 <Info label="Desconto" value={brl(data.desconto)} />
-                <Info label="Pago" value={brl(data.total)} />
+                <Info label="Total da OS" value={brl(data.total)} />
                 <div className="pt-2">
                   {(data.pagamentos ?? []).map((p) => (
                     <p key={p.id} className="num text-sm text-muted-foreground">
@@ -895,6 +1117,63 @@ function AtendimentoPage() {
           </div>
         </aside>
       </div>
+
+      <Dialog
+        open={pecaRapidaOpen}
+        onOpenChange={(open) => {
+          if (!adicionarPecaRapida.isPending) setPecaRapidaOpen(open);
+        }}
+      >
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-display text-xl uppercase">Peça rápida nesta OS</DialogTitle>
+          </DialogHeader>
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            Será criada uma peça <strong>provisória</strong>, com o nome exatamente como aparecerá na nota. Ela não tem estoque/custo configurado e não dará baixa até o gerente concluir o cadastro e contar fisicamente o saldo.
+          </p>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nome da peça (na nota)</Label>
+              <Input
+                autoFocus
+                maxLength={150}
+                value={pecaRapida.nome}
+                onChange={(event) => setPecaRapida({ ...pecaRapida, nome: event.target.value })}
+                placeholder="Ex.: Filtro de óleo — marca/modelo"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Quantidade</Label>
+                <Input type="number" min="0.01" step="0.01" value={pecaRapida.quantidade} onChange={(event) => setPecaRapida({ ...pecaRapida, quantidade: Number(event.target.value) || 0 })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Preço unitário (R$)</Label>
+                <Input type="number" min="0" step="0.01" value={pecaRapida.precoUnitario} onChange={(event) => setPecaRapida({ ...pecaRapida, precoUnitario: Number(event.target.value) || 0 })} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Desconto na peça (%)</Label>
+              <Input type="number" min="0" max="100" step="0.01" value={pecaRapida.descontoPercentual} onChange={(event) => setPecaRapida({ ...pecaRapida, descontoPercentual: Number(event.target.value) || 0 })} />
+              <p className="text-xs text-muted-foreground">Começa em 20%; pode ser alterado nesta peça e vale para qualquer forma de pagamento.</p>
+            </div>
+            <p className="num rounded-md bg-muted/30 p-3 text-sm">
+              Total da peça antes do desconto: {brl(pecaRapida.quantidade * pecaRapida.precoUnitario)} · desconto: {brl(pecaRapida.quantidade * pecaRapida.precoUnitario * pecaRapida.descontoPercentual / 100)}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPecaRapidaOpen(false)} disabled={adicionarPecaRapida.isPending}>Cancelar</Button>
+            <Button
+              type="button"
+              disabled={!pecaRapida.nome.trim() || pecaRapida.quantidade <= 0 || adicionarPecaRapida.isPending}
+              onClick={() => adicionarPecaRapida.mutate()}
+            >
+              {adicionarPecaRapida.isPending && <i className="fa-solid fa-circle-notch fa-spin" />}
+              Adicionar à OS
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {!finalizado && gerente && (
         <EditarDadosOsDialog
@@ -910,10 +1189,18 @@ function AtendimentoPage() {
 
       {finalizando && gerente && (
         <FinalizarDialog
-          atendimento={data}
+          atendimento={{
+            id: data.id,
+            numero: data.numero,
+            placa: data.placa ?? "",
+            modelo: data.modelo,
+            cliente_nome: data.cliente_nome ?? "",
+            cliente_telefone: data.cliente_telefone,
+            km: data.km,
+          }}
           servicos={servicos}
           pecas={pecas ?? []}
-          mecanicos={mecanicos ?? []}
+          mecanicos={(mecanicos ?? []).map((mecanico) => ({ id: mecanico.id, nome: mecanico.nome ?? "" }))}
           onClose={() => setFinalizando(false)}
           onDone={(resultado) => {
             setFinalizando(false);
@@ -921,11 +1208,11 @@ function AtendimentoPage() {
             setReciboPergunta({
               atendimento: {
                 numero: data.numero,
-                placa: data.placa,
+                placa: data.placa ?? "",
                 modelo: data.modelo,
                 fabricante: data.fabricante,
                 km: data.km,
-                cliente_nome: data.cliente_nome,
+                cliente_nome: data.cliente_nome ?? "",
                 cliente_telefone: data.cliente_telefone,
                 desconto: resultado.desconto,
                 total: resultado.total,
@@ -933,13 +1220,13 @@ function AtendimentoPage() {
                 garantia_ate: resultado.garantia_ate,
               },
               servicos: servicos.map((s) => ({
-                nome: s.peca_id
-                  ? `${s.nome} · ${(pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? "peça do estoque"}`
+                nome: s.tipo_item === "peca" || Boolean(s.peca_id)
+                  ? s.nome_peca_snapshot ?? (pecas ?? []).find((p) => p.id === s.peca_id)?.nome ?? s.nome
                   : s.nome,
                 valor: Number(s.valor),
                 quantidade: Number(s.quantidade ?? 1),
               })),
-              pagamentos: resultado.pagamentos,
+              pagamentos: resultado.pagamentos.map((pagamento) => ({ ...pagamento, pago: false })),
             });
           }}
         />
@@ -953,7 +1240,7 @@ function AtendimentoPage() {
                 Atendimento finalizado
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Deseja gerar a notinha do cliente agora?
+                O cliente já pagou o valor da OS? Só confirme se o dinheiro foi efetivamente recebido. Se ainda não pagou, o recebimento continuará pendente e a nota mostrará QR Pix apenas para a parte Pix.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -963,27 +1250,23 @@ function AtendimentoPage() {
                   void navigate({ to: "/patio" });
                 }}
               >
-                Não
+                Agora não
               </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  printReceipt(
-                    reciboPergunta.atendimento,
-                    reciboPergunta.servicos,
-                    reciboPergunta.pagamentos,
-                    {
-                      nome_oficina: config?.nome_oficina || "DK Auto Center",
-                      endereco: config?.endereco ?? "",
-                      telefone: config?.telefone ?? "",
-                      cnpj: config?.cnpj ?? "",
-                    },
-                  );
-                  setReciboPergunta(null);
-                  void navigate({ to: "/patio" });
-                }}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={marcarAtendimentoPago.isPending}
+                onClick={() => void gerarRecibo(false)}
               >
-                Sim, gerar notinha
-              </AlertDialogAction>
+                Ainda não pagou — {reciboPergunta.pagamentos.some((p) => p.forma.toLocaleLowerCase("pt-BR") === "pix") ? "QR Pix" : "nota pendente"}
+              </Button>
+              <Button
+                type="button"
+                disabled={marcarAtendimentoPago.isPending}
+                onClick={() => void gerarRecibo(true)}
+              >
+                Já pagou — registrar no caixa
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -1068,10 +1351,10 @@ function EditarDadosOsDialog({
   useEffect(() => {
     if (!open) return;
     setForm({
-      cliente_nome: atendimento.cliente_nome,
+      cliente_nome: atendimento.cliente_nome ?? "",
       cliente_telefone: atendimento.cliente_telefone ?? "",
       cliente_cpf: atendimento.cliente_cpf ?? "",
-      placa: atendimento.placa,
+      placa: atendimento.placa ?? "",
       fabricante: atendimento.fabricante ?? "",
       modelo: atendimento.modelo ?? "",
       cor: atendimento.cor ?? "",
@@ -1265,11 +1548,14 @@ function ChecklistServicos({
 type Servico = {
   id: string;
   nome: string;
+  nome_peca_snapshot?: string | null;
+  tipo_item?: string;
   valor: number;
   mecanico_id: string | null;
   peca_id: string | null;
   quantidade: number;
   preco_peca?: number | null;
+  desconto_percentual?: number | null;
   retorno_meses: number;
   garantia_km: number | null;
 };
@@ -1309,18 +1595,23 @@ function FinalizarDialog({
   }) => void;
 }) {
   const bruto = servicos.reduce((s, x) => s + Number(x.valor), 0);
-  const [descontoPorServico, setDescontoPorServico] = useState<Record<string, boolean>>({});
+  const [descontoPorServico, setDescontoPorServico] = useState<Record<string, number>>({});
   const [configurarDescontoOpen, setConfigurarDescontoOpen] = useState(false);
   const elegivelNoCatalogo = (servico: Servico) =>
     Boolean(
       servico.peca_id && pecas.find((peca) => peca.id === servico.peca_id)?.aceita_desconto_pix,
     );
-  const incluiNoDesconto = (servico: Servico) =>
-    descontoPorServico[servico.id] ?? elegivelNoCatalogo(servico);
+  const percentualDesconto = (servico: Servico) =>
+    Object.prototype.hasOwnProperty.call(descontoPorServico, servico.id)
+      ? Number(descontoPorServico[servico.id]) || 0
+      : elegivelNoCatalogo(servico)
+        ? Number(servico.desconto_percentual ?? 20)
+        : 0;
   const pecasDaOs = servicos.filter((servico) => Boolean(servico.peca_id));
-  const pecasElegiveis = pecasDaOs
-    .filter(incluiNoDesconto)
-    .reduce((s, servico) => s + Number(servico.preco_peca ?? 0), 0);
+  const desconto = pecasDaOs.reduce((soma, servico) => {
+    if (!elegivelNoCatalogo(servico)) return soma;
+    return soma + Math.round(Number(servico.preco_peca ?? 0) * percentualDesconto(servico)) / 100;
+  }, 0);
 
   useEffect(() => {
     const abrirConfiguracaoPix = (event: KeyboardEvent) => {
@@ -1343,9 +1634,6 @@ function FinalizarDialog({
   }, []);
 
   const [pagamentos, setPagamentos] = useState([{ forma: "Dinheiro", valor: bruto, parcelas: 1 }]);
-  const pagamentoPix =
-    pagamentos.length > 0 && pagamentos.every((pagamento) => pagamento.forma === "PIX");
-  const desconto = pagamentoPix ? Math.round(pecasElegiveis * 0.25 * 100) / 100 : 0;
   const liquido = Math.max(bruto - desconto, 0);
   useEffect(() => {
     if (pagamentos.length !== 1 || pagamentos[0]?.valor === liquido) return;
@@ -1362,6 +1650,10 @@ function FinalizarDialog({
     pagamentos.length === 1
       ? pagamentos.map((pagamento) => ({ ...pagamento, valor: Number(liquido.toFixed(2)) }))
       : pagamentos;
+  const descontosParaEnviar = pecasDaOs.map((servico) => ({
+    servico_id: servico.id,
+    percentual: elegivelNoCatalogo(servico) ? percentualDesconto(servico) : 0,
+  }));
 
   // Retorno agora é uma decisão manual do gerente, não mais gerado
   // automaticamente pelo sistema a partir do catálogo de serviços.
@@ -1372,14 +1664,14 @@ function FinalizarDialog({
     mutationFn: async () => {
       const { data: resultado, error } = await supabase.rpc("finalizar_atendimento_transacional", {
         _atendimento_id: atendimento.id,
-        _desconto: desconto,
+        _descontos: descontosParaEnviar,
         _pagamentos: pagamentosParaEnviar.map((p) => ({
           forma: p.forma,
           valor: Number(p.valor),
           parcelas: p.parcelas,
         })),
         _necessita_retorno: necessitaRetorno,
-        _data_retorno_manual: necessitaRetorno && dataRetorno ? dataRetorno : null,
+        ...(necessitaRetorno && dataRetorno ? { _data_retorno_manual: dataRetorno } : {}),
       });
       if (error) throw error;
       const retorno = resultado as {
@@ -1394,12 +1686,12 @@ function FinalizarDialog({
       };
     },
     onSuccess: ({ garantiaAteStr, desconto: descontoFinal, total: totalFinal }) => {
-      toast.success("Atendimento finalizado e registrado no caixa");
+      toast.success("OS finalizada; pagamentos ficaram pendentes até confirmar o recebimento.");
       onDone({
         desconto: descontoFinal,
         total: totalFinal,
         garantia_ate: garantiaAteStr,
-        pagamentos: pagamentosParaEnviar,
+        pagamentos: pagamentosParaEnviar.map((pagamento) => ({ ...pagamento, pago: false })),
       });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -1431,7 +1723,9 @@ function FinalizarDialog({
               className="flex justify-between border-b px-3 py-2 text-sm last:border-0"
             >
               <span>
-                {s.nome}
+                {s.tipo_item === "peca" || Boolean(s.peca_id)
+                  ? s.nome_peca_snapshot ?? pecas.find((peca) => peca.id === s.peca_id)?.nome ?? s.nome
+                  : s.nome}
                 <span className="text-muted-foreground">
                   {" "}
                   · {mecanicos.find((m) => m.id === s.mecanico_id)?.nome ?? "sem mecânico"}
@@ -1445,7 +1739,7 @@ function FinalizarDialog({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label>Desconto Pix</Label>
+              <Label>Desconto das peças</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -1453,13 +1747,13 @@ function FinalizarDialog({
                 aria-keyshortcuts="Alt+Shift+T"
                 onClick={() => setConfigurarDescontoOpen(true)}
               >
-                <i className="fa-solid fa-percent" /> Ajustar por peça
+                <i className="fa-solid fa-percent" /> Percentual por peça
                 <kbd className="rounded border px-1.5 py-0.5 text-[10px]">Alt+Shift+T</kbd>
               </Button>
             </div>
             <p className="num font-semibold">{brl(desconto)}</p>
             <p className="text-xs text-muted-foreground">
-              25% nas peças selecionadas, somente quando todos os pagamentos forem Pix.
+              Percentuais definidos manualmente. O padrão para novas peças elegíveis é 20%; vale para qualquer forma de pagamento.
             </p>
           </div>
           <div className="space-y-1.5">
@@ -1608,8 +1902,7 @@ function FinalizarDialog({
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Marque as peças que podem receber 25% de desconto nesta OS. Isso não altera o cadastro;
-            o desconto só é aplicado se todos os pagamentos forem Pix.
+            Informe o percentual de desconto para cada peça desta OS. O valor começa em 20%, pode ser ajustado ou zerado e não depende da forma de pagamento.
           </p>
           {pecasDaOs.length === 0 ? (
             <p className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -1620,32 +1913,41 @@ function FinalizarDialog({
               {pecasDaOs.map((servico) => {
                 const peca = pecas.find((item) => item.id === servico.peca_id);
                 const valorPeca = Math.max(Number(servico.preco_peca ?? 0), 0);
-                const marcada = incluiNoDesconto(servico);
-                const descontoItem = marcada ? Math.round(valorPeca * 0.25 * 100) / 100 : 0;
+                const percentual = percentualDesconto(servico);
+                const elegivel = elegivelNoCatalogo(servico);
+                const descontoItem = Math.round(valorPeca * percentual) / 100;
 
                 return (
-                  <label
+                  <div
                     key={servico.id}
-                    className="flex cursor-pointer items-start gap-3 rounded-md border p-3"
+                    className="flex flex-wrap items-center gap-3 rounded-md border p-3"
                   >
-                    <input
-                      type="checkbox"
-                      checked={marcada}
-                      onChange={(event) =>
-                        setDescontoPorServico((atual) => ({
-                          ...atual,
-                          [servico.id]: event.target.checked,
-                        }))
-                      }
-                      className="mt-1 h-4 w-4 accent-primary"
-                    />
                     <span className="min-w-0 flex-1">
-                      <strong className="block">{peca?.nome ?? servico.nome}</strong>
+                      <strong className="block">{servico.nome_peca_snapshot ?? peca?.nome ?? servico.nome}</strong>
                       <span className="block text-xs text-muted-foreground">
-                        Peça: {brl(valorPeca)} · Desconto possível: {brl(descontoItem)}
+                        Valor da peça: {brl(valorPeca)} · Desconto: {brl(descontoItem)}
                       </span>
                     </span>
-                  </label>
+                    <div className="w-28 space-y-1">
+                      <Label htmlFor={`desconto-${servico.id}`}>Percentual (%)</Label>
+                      <Input
+                        id={`desconto-${servico.id}`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={percentual}
+                        disabled={!elegivel}
+                        onChange={(event) =>
+                          setDescontoPorServico((atual) => ({
+                            ...atual,
+                            [servico.id]: Math.min(100, Math.max(0, Number(event.target.value) || 0)),
+                          }))
+                        }
+                        aria-label={`Percentual de desconto em ${servico.nome_peca_snapshot ?? peca?.nome ?? servico.nome}`}
+                      />
+                    </div>
+                  </div>
                 );
               })}
             </div>

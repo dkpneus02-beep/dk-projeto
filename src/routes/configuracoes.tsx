@@ -13,7 +13,10 @@ export const Route = createFileRoute("/configuracoes")({
   head: () => ({
     meta: [
       { title: "Configurações | DK Auto Center" },
-      { name: "description", content: "Horário de fechamento, garantia padrão e alertas do sistema." },
+      {
+        name: "description",
+        content: "Horário de fechamento, garantia padrão e alertas do sistema.",
+      },
       { property: "og:title", content: "Configurações | DK Auto Center" },
       { property: "og:description", content: "Ajustes gerais do sistema da oficina." },
     ],
@@ -28,6 +31,9 @@ function Configuracoes() {
     endereco: "",
     telefone: "",
     cnpj: "",
+    pix_chave: "32801574000155",
+    pix_nome_recebedor: "DK AUTO CENTER",
+    pix_cidade: "SALGUEIRO",
     horario_fechamento: "17:30",
     aviso_antecedencia_min: 15,
     garantia_dias: 90,
@@ -53,6 +59,9 @@ function Configuracoes() {
         endereco: data.endereco ?? "",
         telefone: data.telefone ?? "",
         cnpj: data.cnpj ?? "",
+        pix_chave: data.pix_chave ?? "32801574000155",
+        pix_nome_recebedor: data.pix_nome_recebedor ?? "DK AUTO CENTER",
+        pix_cidade: data.pix_cidade ?? "SALGUEIRO",
         horario_fechamento: data.horario_fechamento.slice(0, 5),
         aviso_antecedencia_min: data.aviso_antecedencia_min,
         garantia_dias: data.garantia_dias,
@@ -112,6 +121,41 @@ function Configuracoes() {
                 onChange={(e) => setForm({ ...form, cnpj: e.target.value })}
                 placeholder="00.000.000/0000-00"
               />
+            </div>
+            <div className="space-y-3 rounded-md border bg-muted/20 p-4 sm:col-span-2">
+              <div>
+                <h3 className="font-semibold">Pix impresso na nota</h3>
+                <p className="text-xs text-muted-foreground">
+                  A chave e os dados abaixo são usados para gerar o QR Code localmente. Confirme-os
+                  com o banco antes de cobrar.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Chave Pix (CNPJ, CPF, telefone, e-mail ou aleatória)</Label>
+                  <Input
+                    value={form.pix_chave}
+                    onChange={(e) => setForm({ ...form, pix_chave: e.target.value })}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Nome do recebedor no Pix</Label>
+                  <Input
+                    maxLength={25}
+                    value={form.pix_nome_recebedor}
+                    onChange={(e) => setForm({ ...form, pix_nome_recebedor: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Cidade do recebedor</Label>
+                  <Input
+                    maxLength={15}
+                    value={form.pix_cidade}
+                    onChange={(e) => setForm({ ...form, pix_cidade: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Horário de fechamento</Label>

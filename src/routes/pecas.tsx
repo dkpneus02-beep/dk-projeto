@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +22,8 @@ import { brl, matches, norm } from "@/lib/format";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import { BarcodeCameraDialog } from "@/components/BarcodeCameraDialog";
+import { useAuth } from "@/hooks/useAuth";
+import { isGerente } from "@/lib/permissions";
 
 export const Route = createFileRoute("/pecas")({
   head: () => ({
@@ -110,15 +112,26 @@ const novoFormulario = (): PecaForm => ({
 
 function Pecas() {
   const qc = useQueryClient();
+  const { role } = useAuth();
+  const gerente = isGerente(role);
   const [busca, setBusca] = useState("");
+  const [codigoBipado, setCodigoBipado] = useState<string | null>(null);
+  const buscaInputRef = useRef<HTMLInputElement>(null);
   const [tab, setTab] = useState("todos");
   const [edit, setEdit] = useState<PecaForm | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraDestino, setCameraDestino] = useState<"busca" | "cadastro">("busca");
   const [entradaOpen, setEntradaOpen] = useState(false);
   const [entradaPecaId, setEntradaPecaId] = useState("");
   const [entradaQuantidade, setEntradaQuantidade] = useState(1);
   const [entradaCusto, setEntradaCusto] = useState(0);
   const [ajuste, setAjuste] = useState<AjusteEstoqueForm | null>(null);
+  const [pecaPendente, setPecaPendente] = useState<{
+    id: string;
+    nome: string;
+    estoqueAlvo: number;
+    custoUnitario: number;
+  } | null>(null);
   const [favoritos, setFavoritos] = useState<string[]>([]);
 
   useEffect(() => {
@@ -178,20 +191,25 @@ function Pecas() {
       (data ?? []).filter(
         (p) =>
           (tab === "todos" || (tab === "favoritos" ? favoritos.includes(p.id) : p.tipo === tab)) &&
-          matches(busca, [
-            p.nome,
-            p.sku,
-            p.marca,
-            p.medida,
-            p.modelo_desenho,
-            ...(referenciasPorPeca.get(p.id) ?? []).flatMap((ref) => [
-              ref.marca,
-              ref.referencia,
-              ref.observacao,
-            ]),
-          ]),
+          (codigoBipado
+            ? norm(p.sku) === codigoBipado ||
+              (referenciasPorPeca.get(p.id) ?? []).some(
+                (ref) => norm(ref.referencia) === codigoBipado,
+              )
+            : matches(busca, [
+                p.nome,
+                p.sku,
+                p.marca,
+                p.medida,
+                p.modelo_desenho,
+                ...(referenciasPorPeca.get(p.id) ?? []).flatMap((ref) => [
+                  ref.marca,
+                  ref.referencia,
+                  ref.observacao,
+                ]),
+              ])),
       ),
-    [data, busca, tab, favoritos, referenciasPorPeca],
+    [data, busca, codigoBipado, tab, favoritos, referenciasPorPeca],
   );
   const ajusteDelta = ajuste
     ? Math.round((ajuste.estoqueAlvo - ajuste.estoqueAtual) * 100) / 100
@@ -209,27 +227,38 @@ function Pecas() {
     const codigo = codigoBruto.trim();
     if (!codigo) return;
     setBusca(codigo);
+    setCodigoBipado(norm(codigo));
+    setTab("todos");
     const codigoNormalizado = norm(codigo);
     const achada = (data ?? []).find(
       (p) =>
         norm(p.sku) === codigoNormalizado ||
-        (referenciasPorPeca.get(p.id) ?? []).some((ref) =>
-          norm(ref.referencia).includes(codigoNormalizado),
+        (referenciasPorPeca.get(p.id) ?? []).some(
+          (ref) => norm(ref.referencia) === codigoNormalizado,
         ),
     );
     if (achada) {
       toast.success(`Item encontrado: ${achada.nome}`);
-      abrir(achada);
       return;
     }
-
-    // Código novo: já abre o cadastro com o SKU preenchido, sem exigir redigitação.
-    abrirEditor({ ...novoFormulario(), sku: codigo });
-    toast.info(`Código ${codigo} preenchido. Complete nome, preço e estoque para salvar.`);
+    if (data)
+      toast.info(
+        `Nenhum item encontrado para o código ${codigo}. Confira ou cadastre o item manualmente.`,
+      );
   };
 
-  // Leitor USB/Bluetooth: funciona como teclado e cai na mesma busca inteligente da câmera.
-  useBarcodeScanner(aplicarCodigo);
+  const abrirCameraParaBusca = () => {
+    setCameraDestino("busca");
+    setCameraOpen(true);
+  };
+
+  const abrirCameraParaCadastro = () => {
+    setCameraDestino("cadastro");
+    setCameraOpen(true);
+  };
+
+  // Leitor USB/Bluetooth: uma leitura pesquisa o estoque; nunca inicia cadastro.
+  useBarcodeScanner(aplicarCodigo, !edit && !entradaOpen && !ajuste && !cameraOpen);
 
   const editorAberto = edit !== null;
   useEffect(() => {
@@ -480,6 +509,33 @@ function Pecas() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const concluirCadastroPendente = useMutation({
+    mutationFn: async () => {
+      if (!pecaPendente) throw new Error("Selecione a peça pendente.");
+      if (pecaPendente.estoqueAlvo < 0 || pecaPendente.custoUnitario < 0) {
+        throw new Error("Estoque e custo não podem ser negativos.");
+      }
+      const { data: resultado, error } = await supabase.rpc("concluir_cadastro_peca_rapida", {
+        _peca_id: pecaPendente.id,
+        _estoque_alvo: pecaPendente.estoqueAlvo,
+        _custo_unitario_entrada: pecaPendente.custoUnitario,
+        _motivo: "Conferência física ao concluir cadastro rápido",
+      });
+      if (error) throw error;
+      return resultado as { nome?: string; estoque_confirmado?: number };
+    },
+    onSuccess: (resultado) => {
+      toast.success(
+        `Cadastro concluído: ${resultado.nome ?? pecaPendente?.nome}; estoque físico ${Number(resultado.estoque_confirmado ?? 0)} registrado por lote.`,
+      );
+      setPecaPendente(null);
+      void qc.invalidateQueries({ queryKey: ["pecas"] });
+      void qc.invalidateQueries({ queryKey: ["pecas-ativas-atendimento"] });
+      void qc.invalidateQueries({ queryKey: ["atendimento"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const remover = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -537,11 +593,14 @@ function Pecas() {
           <Button
             variant="outline"
             onClick={() => {
-              abrirEditor(novoFormulario());
-              setCameraOpen(true);
+              setBusca("");
+              setCodigoBipado(null);
+              setTab("todos");
+              buscaInputRef.current?.focus();
             }}
+            title="Clique aqui e use o leitor USB/Bluetooth; a busca não abre a câmera nem o cadastro."
           >
-            <i className="fa-solid fa-barcode" /> Cadastrar por código
+            <i className="fa-solid fa-barcode" /> Bipar para buscar
           </Button>
           <Button onClick={() => abrir()}>
             <i className="fa-solid fa-plus" /> Novo item
@@ -551,12 +610,16 @@ function Pecas() {
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
+          ref={buscaInputRef}
           value={busca}
-          onChange={(e) => setBusca(e.target.value)}
+          onChange={(e) => {
+            setCodigoBipado(null);
+            setBusca(e.target.value);
+          }}
           placeholder="Buscar por nome, código, marca ou medida"
           className="max-w-sm"
         />
-        <Button variant="outline" onClick={() => setCameraOpen(true)}>
+        <Button variant="outline" onClick={abrirCameraParaBusca}>
           <i className="fa-solid fa-camera" /> Ler pela câmera
         </Button>
         <Tabs value={tab} onValueChange={setTab}>
@@ -585,10 +648,22 @@ function Pecas() {
             {lista.map((p) => (
               <tr key={p.id} className="border-b last:border-0">
                 <td className="p-3">
-                  <p className="font-medium">{p.nome}</p>
+                  <p className="flex flex-wrap items-center gap-2 font-medium">
+                    {p.nome}
+                    {p.cadastro_pendente && (
+                      <Badge variant="destructive">CADASTRO / ESTOQUE PENDENTE</Badge>
+                    )}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {[p.sku, p.marca, p.medida, p.modelo_desenho].filter(Boolean).join(" · ")}
                   </p>
+                  {p.cadastro_pendente && (
+                    <p className="mt-1 max-w-xl rounded border border-amber-500/50 bg-amber-500/10 p-2 text-xs font-semibold text-amber-900">
+                      Peça lançada rapidamente na OS: não conte como estoque disponível. Use o lápis
+                      para completar marca, SKU/referências e demais dados; depois confirme custo e
+                      quantidade física pelo botão de conferência.
+                    </p>
+                  )}
                   {referenciasEncontradas(p).length > 0 && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       <span className="font-medium text-foreground">Referências:</span>{" "}
@@ -610,6 +685,23 @@ function Pecas() {
                 <td className="num p-3">{Number(p.margem)}%</td>
                 <td className="num p-3 font-semibold">{brl(p.preco_venda)}</td>
                 <td className="p-3 text-right">
+                  {p.cadastro_pendente && gerente && (
+                    <button
+                      className="mr-3 text-amber-700 hover:text-amber-900"
+                      title="Concluir cadastro e conferir estoque físico"
+                      aria-label={`Concluir cadastro pendente de ${p.nome}`}
+                      onClick={() =>
+                        setPecaPendente({
+                          id: p.id,
+                          nome: p.nome,
+                          estoqueAlvo: Number(p.estoque),
+                          custoUnitario: Number(p.preco_custo),
+                        })
+                      }
+                    >
+                      <i className="fa-solid fa-clipboard-check" />
+                    </button>
+                  )}
                   <button
                     className="mr-3 text-muted-foreground hover:text-foreground"
                     title="Favoritar item"
@@ -645,7 +737,9 @@ function Pecas() {
                   <button
                     className="mr-3 text-muted-foreground hover:text-foreground"
                     onClick={() => abrir(p)}
-                    title="Editar item"
+                    title={
+                      p.cadastro_pendente ? "Configurar dados pendentes da peça" : "Editar item"
+                    }
                   >
                     <i className="fa-solid fa-pen" />
                   </button>
@@ -683,6 +777,86 @@ function Pecas() {
           </tbody>
         </table>
       </div>
+
+      <Dialog
+        open={Boolean(pecaPendente)}
+        onOpenChange={(open) => {
+          if (!open && !concluirCadastroPendente.isPending) setPecaPendente(null);
+        }}
+      >
+        {pecaPendente && (
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display text-xl uppercase">
+                Concluir peça provisória
+              </DialogTitle>
+            </DialogHeader>
+            <p className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+              Confirme a quantidade encontrada fisicamente. O ajuste será registrado em lote; não
+              será feita alteração direta de saldo.
+            </p>
+            <div className="space-y-3">
+              <div className="rounded-md border p-3 font-semibold">{pecaPendente.nome}</div>
+              <div className="space-y-1.5">
+                <Label>Quantidade contada fisicamente</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="num"
+                  value={pecaPendente.estoqueAlvo}
+                  onChange={(event) =>
+                    setPecaPendente({
+                      ...pecaPendente,
+                      estoqueAlvo: Number(event.target.value) || 0,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Custo unitário de referência (R$)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="num"
+                  value={pecaPendente.custoUnitario}
+                  onChange={(event) =>
+                    setPecaPendente({
+                      ...pecaPendente,
+                      custoUnitario: Number(event.target.value) || 0,
+                    })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Se houver nova entrada de estoque, ela também deverá ser lançada pelo fluxo de
+                  entrada com custo por lote.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPecaPendente(null)}
+                disabled={concluirCadastroPendente.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={concluirCadastroPendente.isPending}
+                onClick={() => concluirCadastroPendente.mutate()}
+              >
+                {concluirCadastroPendente.isPending && (
+                  <i className="fa-solid fa-circle-notch fa-spin" />
+                )}
+                Concluir cadastro e estoque
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
 
       <Dialog open={entradaOpen} onOpenChange={setEntradaOpen}>
         <DialogContent className="sm:max-w-md">
@@ -855,7 +1029,16 @@ function Pecas() {
       <BarcodeCameraDialog
         open={cameraOpen}
         onOpenChange={setCameraOpen}
-        onDetected={aplicarCodigo}
+        onDetected={(codigo) => {
+          if (cameraDestino === "cadastro") {
+            const sku = codigo.trim();
+            if (!sku) return;
+            setEdit((atual) => (atual ? { ...atual, sku } : atual));
+            toast.success("Código preenchido no SKU do cadastro.");
+            return;
+          }
+          aplicarCodigo(codigo);
+        }}
       />
 
       {edit && (
@@ -871,7 +1054,7 @@ function Pecas() {
               <p className="text-sm text-muted-foreground">
                 Use câmera ou scanner USB para preencher o código automaticamente.
               </p>
-              <Button type="button" variant="outline" size="sm" onClick={() => setCameraOpen(true)}>
+              <Button type="button" variant="outline" size="sm" onClick={abrirCameraParaCadastro}>
                 <i className="fa-solid fa-camera" /> Ler código
               </Button>
             </div>
