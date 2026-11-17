@@ -37,26 +37,28 @@ CREATE POLICY "notificacoes_internas_select_ativas" ON public.notificacoes_inter
   FOR SELECT TO authenticated
   USING (
     (
-      atendimento_id IS NULL
-      AND atendimento_servico_id IS NULL
+      (
+        atendimento_id IS NULL
+        AND atendimento_servico_id IS NULL
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.atendimentos a
+        WHERE a.id = notificacoes_internas.atendimento_id
+          AND a.deleted_at IS NULL
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.atendimento_servicos s
+        JOIN public.atendimentos a ON a.id = s.atendimento_id
+        WHERE s.id = notificacoes_internas.atendimento_servico_id
+          AND a.deleted_at IS NULL
+      )
     )
-    OR EXISTS (
-      SELECT 1 FROM public.atendimentos a
-      WHERE a.id = notificacoes_internas.atendimento_id
-        AND a.deleted_at IS NULL
+    AND (
+      destinatario_user_id = auth.uid()
+      OR criado_por = auth.uid()
+      OR public.has_role(auth.uid(), 'gerente')
     )
-    OR EXISTS (
-      SELECT 1
-      FROM public.atendimento_servicos s
-      JOIN public.atendimentos a ON a.id = s.atendimento_id
-      WHERE s.id = notificacoes_internas.atendimento_servico_id
-        AND a.deleted_at IS NULL
-    )
-  )
-  AND (
-    destinatario_user_id = auth.uid()
-    OR criado_por = auth.uid()
-    OR public.has_role(auth.uid(), 'gerente')
   );
 
 -- OS excluída remove imediatamente todas as mensagens e suas conversas relacionadas.
