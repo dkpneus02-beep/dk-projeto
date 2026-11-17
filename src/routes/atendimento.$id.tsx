@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -71,9 +71,14 @@ function AtendimentoPage() {
   const navigate = useNavigate();
   const { role, user, nome, mecanicoId } = useAuth();
   const gerente = isGerente(role);
+  const pecaRapidaStorageKey = user?.id ? `dk:peca-rapida:${user.id}:${id}` : null;
+  const pecaRapidaStorageKeyRef = useRef(pecaRapidaStorageKey);
   const [finalizando, setFinalizando] = useState(false);
   const [pecaRapidaOpen, setPecaRapidaOpen] = useState(false);
   const [pecaRapida, setPecaRapida] = useState({ nome: "", quantidade: 1, precoUnitario: 0, descontoPercentual: 20 });
+  const [pecaRapidaRequestId, setPecaRapidaRequestId] = useState<string>(() => crypto.randomUUID());
+  const [pecaRapidaRestaurada, setPecaRapidaRestaurada] = useState(false);
+  const [pecaRapidaProntaPara, setPecaRapidaProntaPara] = useState<string | null>(null);
   const [editarDadosOpen, setEditarDadosOpen] = useState(false);
   const [novaAvaria, setNovaAvaria] = useState("");
   const [fotoBusy, setFotoBusy] = useState(false);
@@ -89,6 +94,51 @@ function AtendimentoPage() {
     servicos: Parameters<typeof printReceipt>[1];
     pagamentos: Parameters<typeof printReceipt>[2];
   }>(null);
+
+  useEffect(() => {
+    pecaRapidaStorageKeyRef.current = pecaRapidaStorageKey;
+  }, [pecaRapidaStorageKey]);
+
+  useEffect(() => {
+    if (!pecaRapidaStorageKey) {
+      setPecaRapidaProntaPara(null);
+      return;
+    }
+    setPecaRapidaProntaPara(null);
+    setPecaRapidaOpen(false);
+    setPecaRapida({ nome: "", quantidade: 1, precoUnitario: 0, descontoPercentual: 20 });
+    setPecaRapidaRequestId(crypto.randomUUID());
+    setPecaRapidaRestaurada(false);
+    try {
+      const salvo = sessionStorage.getItem(pecaRapidaStorageKey);
+      if (salvo) {
+        const rascunho: unknown = JSON.parse(salvo);
+        if (!rascunho || typeof rascunho !== "object") throw new Error("Rascunho inválido");
+        const item = rascunho as Record<string, unknown>;
+        if (
+          typeof item["requestId"] !== "string" ||
+          !/^[0-9a-f-]{36}$/i.test(item["requestId"] as string) ||
+          typeof item["nome"] !== "string" ||
+          !Number.isFinite(Number(item["quantidade"])) ||
+          !Number.isFinite(Number(item["precoUnitario"])) ||
+          !Number.isFinite(Number(item["descontoPercentual"]))
+        ) throw new Error("Rascunho inválido");
+        setPecaRapidaRequestId(item["requestId"] as string);
+        setPecaRapida({
+          nome: item["nome"] as string,
+          quantidade: Number(item["quantidade"]),
+          precoUnitario: Number(item["precoUnitario"]),
+          descontoPercentual: Number(item["descontoPercentual"]),
+        });
+        setPecaRapidaRestaurada(true);
+      }
+    } catch {
+      try { sessionStorage.removeItem(pecaRapidaStorageKey); } catch { /* storage indisponível */ }
+    } finally {
+      setPecaRapidaProntaPara(pecaRapidaStorageKey);
+    }
+  }, [pecaRapidaStorageKey]);
+  const pecaRapidaPronta = !!pecaRapidaStorageKey && pecaRapidaProntaPara === pecaRapidaStorageKey;
 
   const aplicarCodigoNaBuscaPeca = (codigo: string, servicoId = cameraServicoId) => {
     const busca = codigo.trim();
@@ -299,29 +349,62 @@ function AtendimentoPage() {
     },
   });
 
+  const atualizarPecaRapida = (patch: Partial<typeof pecaRapida>) => {
+    const atualizada = { ...pecaRapida, ...patch };
+    const requestId = crypto.randomUUID();
+    setPecaRapida(atualizada);
+    setPecaRapidaRequestId(requestId);
+    setPecaRapidaRestaurada(false);
+    if (pecaRapidaStorageKey) {
+      try {
+        sessionStorage.setItem(pecaRapidaStorageKey, JSON.stringify({ requestId, ...atualizada }));
+      } catch {
+        // A operação ainda funciona nesta sessão; a restauração após reload fica indisponível.
+      }
+    }
+  };
+
   const adicionarPecaRapida = useMutation({
-    mutationFn: async () => {
-      if (!pecaRapida.nome.trim()) throw new Error("Informe o nome da peça como deve aparecer na nota.");
-      if (pecaRapida.quantidade <= 0 || pecaRapida.precoUnitario < 0) {
+    mutationFn: async (solicitacao: {
+      atendimentoId: string;
+      storageKey: string;
+      requestId: string;
+      nome: string;
+      quantidade: number;
+      precoUnitario: number;
+      descontoPercentual: number;
+    }) => {
+      if (!solicitacao.storageKey || solicitacao.storageKey !== pecaRapidaStorageKeyRef.current) {
+        throw new Error("A OS mudou durante a operação. Confira os dados e tente novamente.");
+      }
+      if (!solicitacao.nome.trim()) throw new Error("Informe o nome da peça como deve aparecer na nota.");
+      if (solicitacao.quantidade <= 0 || solicitacao.precoUnitario < 0) {
         throw new Error("Informe quantidade maior que zero e preço unitário válido.");
       }
-      if (pecaRapida.descontoPercentual < 0 || pecaRapida.descontoPercentual > 100) {
+      if (solicitacao.descontoPercentual < 0 || solicitacao.descontoPercentual > 100) {
         throw new Error("O desconto deve ficar entre 0% e 100%.");
       }
-      const { error } = await supabase.rpc("adicionar_peca_rapida_atendimento", {
-        _atendimento_id: id,
-        _nome: pecaRapida.nome.trim(),
-        _quantidade: pecaRapida.quantidade,
-        _preco_unitario: pecaRapida.precoUnitario,
-        _desconto_percentual: pecaRapida.descontoPercentual,
+      const { data, error } = await supabase.rpc("adicionar_peca_rapida_atendimento", {
+        _atendimento_id: solicitacao.atendimentoId,
+        _nome: solicitacao.nome.trim(),
+        _quantidade: solicitacao.quantidade,
+        _preco_unitario: solicitacao.precoUnitario,
+        _desconto_percentual: solicitacao.descontoPercentual,
+        _request_id: solicitacao.requestId,
       });
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
-      toast.success("Peça provisória adicionada à OS. Configure o cadastro e confira o estoque depois.");
-      setPecaRapidaOpen(false);
-      setPecaRapida({ nome: "", quantidade: 1, precoUnitario: 0, descontoPercentual: 20 });
-      void qc.invalidateQueries({ queryKey: ["atendimento", id] });
+    onSuccess: (_data, solicitacao) => {
+      toast.success("Peça provisória vinculada à OS. Configure o cadastro e confira o estoque depois.");
+      try { sessionStorage.removeItem(solicitacao.storageKey); } catch { /* ignorar indisponibilidade do storage */ }
+      if (solicitacao.storageKey === pecaRapidaStorageKeyRef.current) {
+        setPecaRapidaOpen(false);
+        setPecaRapida({ nome: "", quantidade: 1, precoUnitario: 0, descontoPercentual: 20 });
+        setPecaRapidaRequestId(crypto.randomUUID());
+        setPecaRapidaRestaurada(false);
+      }
+      void qc.invalidateQueries({ queryKey: ["atendimento", solicitacao.atendimentoId] });
       void qc.invalidateQueries({ queryKey: ["pecas"] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -527,7 +610,7 @@ function AtendimentoPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="num text-sm text-muted-foreground">Total dos serviços: {brl(total)}</span>
                 {!finalizado && gerente && (
-                  <Button type="button" variant="outline" onClick={() => setPecaRapidaOpen(true)}>
+                  <Button type="button" variant="outline" disabled={!pecaRapidaPronta} onClick={() => setPecaRapidaOpen(true)}>
                     <i className="fa-solid fa-bolt" /> Peça rápida
                   </Button>
                 )}
@@ -1128,8 +1211,13 @@ function AtendimentoPage() {
           <DialogHeader>
             <DialogTitle className="font-display text-xl uppercase">Peça rápida nesta OS</DialogTitle>
           </DialogHeader>
+          {pecaRapidaRestaurada && (
+            <p className="rounded-md border border-blue-500/40 bg-blue-500/10 p-3 text-sm">
+              Uma tentativa interrompida foi recuperada. Reenvie sem alterar os dados para confirmar o resultado sem duplicar a peça.
+            </p>
+          )}
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            Será criada uma peça <strong>provisória</strong>, com o nome exatamente como aparecerá na nota. Ela não tem estoque/custo configurado e não dará baixa até o gerente concluir o cadastro e contar fisicamente o saldo.
+            Será criada ou reutilizada uma peça <strong>provisória</strong>, com o nome exatamente como aparecerá na nota. O valor informado fica nesta OS; o preço global do catálogo não é alterado. Ela não tem estoque/custo configurado e não dará baixa até o gerente concluir o cadastro e contar fisicamente o saldo.
           </p>
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -1137,24 +1225,25 @@ function AtendimentoPage() {
               <Input
                 autoFocus
                 maxLength={150}
+                disabled={!pecaRapidaPronta || adicionarPecaRapida.isPending}
                 value={pecaRapida.nome}
-                onChange={(event) => setPecaRapida({ ...pecaRapida, nome: event.target.value })}
+                onChange={(event) => atualizarPecaRapida({ nome: event.target.value })}
                 placeholder="Ex.: Filtro de óleo — marca/modelo"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Quantidade</Label>
-                <Input type="number" min="0.01" step="0.01" value={pecaRapida.quantidade} onChange={(event) => setPecaRapida({ ...pecaRapida, quantidade: Number(event.target.value) || 0 })} />
+                <Input type="number" min="0.01" step="0.01" disabled={!pecaRapidaPronta || adicionarPecaRapida.isPending} value={pecaRapida.quantidade} onChange={(event) => atualizarPecaRapida({ quantidade: Number(event.target.value) || 0 })} />
               </div>
               <div className="space-y-1.5">
                 <Label>Preço unitário (R$)</Label>
-                <Input type="number" min="0" step="0.01" value={pecaRapida.precoUnitario} onChange={(event) => setPecaRapida({ ...pecaRapida, precoUnitario: Number(event.target.value) || 0 })} />
+                <Input type="number" min="0" step="0.01" disabled={!pecaRapidaPronta || adicionarPecaRapida.isPending} value={pecaRapida.precoUnitario} onChange={(event) => atualizarPecaRapida({ precoUnitario: Number(event.target.value) || 0 })} />
               </div>
             </div>
             <div className="space-y-1.5">
               <Label>Desconto na peça (%)</Label>
-              <Input type="number" min="0" max="100" step="0.01" value={pecaRapida.descontoPercentual} onChange={(event) => setPecaRapida({ ...pecaRapida, descontoPercentual: Number(event.target.value) || 0 })} />
+              <Input type="number" min="0" max="100" step="0.01" disabled={!pecaRapidaPronta || adicionarPecaRapida.isPending} value={pecaRapida.descontoPercentual} onChange={(event) => atualizarPecaRapida({ descontoPercentual: Number(event.target.value) || 0 })} />
               <p className="text-xs text-muted-foreground">Começa em 20%; pode ser alterado nesta peça e vale para qualquer forma de pagamento.</p>
             </div>
             <p className="num rounded-md bg-muted/30 p-3 text-sm">
@@ -1165,8 +1254,16 @@ function AtendimentoPage() {
             <Button type="button" variant="outline" onClick={() => setPecaRapidaOpen(false)} disabled={adicionarPecaRapida.isPending}>Cancelar</Button>
             <Button
               type="button"
-              disabled={!pecaRapida.nome.trim() || pecaRapida.quantidade <= 0 || adicionarPecaRapida.isPending}
-              onClick={() => adicionarPecaRapida.mutate()}
+              disabled={!pecaRapidaPronta || !pecaRapida.nome.trim() || pecaRapida.quantidade <= 0 || adicionarPecaRapida.isPending}
+              onClick={() => adicionarPecaRapida.mutate({
+                atendimentoId: id,
+                storageKey: pecaRapidaStorageKey ?? "",
+                requestId: pecaRapidaRequestId,
+                nome: pecaRapida.nome,
+                quantidade: pecaRapida.quantidade,
+                precoUnitario: pecaRapida.precoUnitario,
+                descontoPercentual: pecaRapida.descontoPercentual,
+              })}
             >
               {adicionarPecaRapida.isPending && <i className="fa-solid fa-circle-notch fa-spin" />}
               Adicionar à OS

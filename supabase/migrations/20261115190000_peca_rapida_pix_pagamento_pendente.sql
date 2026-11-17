@@ -422,13 +422,31 @@ BEGIN
 END;
 $$;
 
+-- Chaves privadas para retries de cadastro rápido; não expõe dados ao cliente.
+CREATE TABLE IF NOT EXISTS public.peca_rapida_idempotencia (
+  request_id uuid PRIMARY KEY,
+  atendimento_id uuid NOT NULL,
+  gerente_id uuid NOT NULL,
+  nome text NOT NULL,
+  quantidade numeric(12,2) NOT NULL,
+  preco_unitario numeric(12,2) NOT NULL,
+  desconto_percentual numeric(5,2) NOT NULL,
+  resultado jsonb,
+  criado_em timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.peca_rapida_idempotencia ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.peca_rapida_idempotencia FROM PUBLIC, anon, authenticated;
+
 -- Cria o marcador do catálogo e a linha da OS em uma única transação.
+-- A mesma chave e payload retornam o resultado anterior em retries concorrentes.
+DROP FUNCTION IF EXISTS public.adicionar_peca_rapida_atendimento(uuid, text, numeric, numeric, numeric);
 CREATE OR REPLACE FUNCTION public.adicionar_peca_rapida_atendimento(
   _atendimento_id uuid,
   _nome text,
   _quantidade numeric,
   _preco_unitario numeric,
-  _desconto_percentual numeric DEFAULT 20
+  _desconto_percentual numeric,
+  _request_id uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -439,6 +457,8 @@ DECLARE
   v_atendimento public.atendimentos%ROWTYPE;
   v_peca_id uuid;
   v_servico_id uuid;
+  v_idempotencia public.peca_rapida_idempotencia%ROWTYPE;
+  v_resultado jsonb;
   v_nome text := BTRIM(COALESCE(_nome, ''));
   v_quantidade numeric(12,2) := ROUND(COALESCE(_quantidade, 0), 2);
   v_preco numeric(12,2) := ROUND(COALESCE(_preco_unitario, -1), 2);
@@ -446,6 +466,9 @@ DECLARE
 BEGIN
   IF auth.uid() IS NULL OR NOT public.has_role(auth.uid(), 'gerente') THEN
     RAISE EXCEPTION 'Apenas o gerente pode adicionar uma peça rápida à OS.';
+  END IF;
+  IF _request_id IS NULL THEN
+    RAISE EXCEPTION 'A chave da solicitação é obrigatória; tente novamente.';
   END IF;
   IF _atendimento_id IS NULL THEN
     RAISE EXCEPTION 'Informe a OS para adicionar a peça.';
@@ -462,6 +485,38 @@ BEGIN
   IF v_desconto < 0 OR v_desconto > 100 THEN
     RAISE EXCEPTION 'O desconto deve ficar entre 0% e 100%.';
   END IF;
+
+  INSERT INTO public.peca_rapida_idempotencia (
+    request_id, atendimento_id, gerente_id, nome, quantidade,
+    preco_unitario, desconto_percentual
+  ) VALUES (
+    _request_id, _atendimento_id, auth.uid(), v_nome, v_quantidade,
+    v_preco, v_desconto
+  )
+  ON CONFLICT (request_id) DO NOTHING;
+
+  SELECT * INTO v_idempotencia
+  FROM public.peca_rapida_idempotencia
+  WHERE request_id = _request_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Não foi possível registrar a solicitação. Tente novamente.';
+  END IF;
+  IF v_idempotencia.atendimento_id IS DISTINCT FROM _atendimento_id
+     OR v_idempotencia.gerente_id IS DISTINCT FROM auth.uid()
+     OR v_idempotencia.nome IS DISTINCT FROM v_nome
+     OR v_idempotencia.quantidade IS DISTINCT FROM v_quantidade
+     OR v_idempotencia.preco_unitario IS DISTINCT FROM v_preco
+     OR v_idempotencia.desconto_percentual IS DISTINCT FROM v_desconto THEN
+    RAISE EXCEPTION 'Esta chave já pertence a outra solicitação. Atualize e tente novamente.';
+  END IF;
+  IF v_idempotencia.resultado IS NOT NULL THEN
+    RETURN v_idempotencia.resultado;
+  END IF;
+
+  -- Serializa solicitações independentes com o mesmo nome, inclusive quando
+  -- a consulta ainda não encontra uma linha de catálogo para bloquear.
+  PERFORM pg_advisory_xact_lock(hashtext('quick-part:' || LOWER(v_nome)));
 
   SELECT * INTO v_atendimento
   FROM public.atendimentos
@@ -486,10 +541,8 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'Já existe uma peça configurada com esse nome. Selecione-a no catálogo.';
     END IF;
-    UPDATE public.pecas
-    SET preco_venda = v_preco,
-        aceita_desconto_pix = true
-    WHERE id = v_peca_id;
+    -- Não altere o preço global do catálogo ao lançar outra OS: o valor desta
+    -- venda fica no snapshot da linha e o gerente conclui o cadastro depois.
   ELSE
     INSERT INTO public.pecas (
       nome, tipo, categoria, estoque, estoque_minimo, preco_custo,
@@ -511,12 +564,16 @@ BEGIN
   )
   RETURNING id INTO v_servico_id;
 
-  RETURN jsonb_build_object(
+  v_resultado := jsonb_build_object(
     'atendimento_id', _atendimento_id,
     'peca_id', v_peca_id,
     'atendimento_servico_id', v_servico_id,
     'nome', v_nome
   );
+  UPDATE public.peca_rapida_idempotencia
+  SET resultado = v_resultado
+  WHERE request_id = _request_id;
+  RETURN v_resultado;
 END;
 $$;
 
@@ -842,8 +899,42 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.adicionar_peca_rapida_atendimento(uuid, text, numeric, numeric, numeric) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.adicionar_peca_rapida_atendimento(uuid, text, numeric, numeric, numeric) TO authenticated;
+-- Mantém compatibilidade com clientes antigos, mas direciona a entrada sem custo
+-- informado ao fluxo atual de lote usando o custo médio registrado da peça.
+CREATE OR REPLACE FUNCTION public.adicionar_entrada_estoque(
+  _peca_id uuid,
+  _quantidade numeric
+)
+RETURNS public.pecas
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_custo numeric;
+BEGIN
+  IF auth.uid() IS NULL OR NOT public.has_role(auth.uid(), 'gerente') THEN
+    RAISE EXCEPTION 'Apenas o gerente pode registrar entrada de estoque.';
+  END IF;
+  IF _quantidade IS NULL OR _quantidade <= 0 THEN
+    RAISE EXCEPTION 'A quantidade de entrada deve ser maior que zero.';
+  END IF;
+  SELECT GREATEST(COALESCE(preco_custo, 0), 0)
+  INTO v_custo
+  FROM public.pecas
+  WHERE id = _peca_id AND deleted_at IS NULL
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Item de estoque não encontrado ou excluído.';
+  END IF;
+  RETURN public.adicionar_entrada_estoque_com_custo(_peca_id, _quantidade, v_custo);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.adicionar_entrada_estoque(uuid, numeric) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.adicionar_entrada_estoque(uuid, numeric) TO authenticated;
+REVOKE ALL ON FUNCTION public.adicionar_peca_rapida_atendimento(uuid, text, numeric, numeric, numeric, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.adicionar_peca_rapida_atendimento(uuid, text, numeric, numeric, numeric, uuid) TO authenticated;
 REVOKE ALL ON FUNCTION public.concluir_cadastro_peca_rapida(uuid, numeric, numeric, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.concluir_cadastro_peca_rapida(uuid, numeric, numeric, text) TO authenticated;
 REVOKE ALL ON FUNCTION public.finalizar_atendimento_transacional(uuid, jsonb, boolean, date, jsonb) FROM PUBLIC, anon;
@@ -857,3 +948,6 @@ COMMENT ON COLUMN public.atendimento_servicos.desconto_percentual IS
   'Percentual manual de desconto aplicado somente ao preço da peça, independentemente da forma de pagamento.';
 COMMENT ON COLUMN public.pagamentos.pago IS
   'Indica recebimento confirmado pelo gerente; pagamentos pendentes não entram no caixa.';
+
+-- A assinatura da RPC mudou; atualiza o schema cache usado pelo PostgREST.
+NOTIFY pgrst, 'reload schema';

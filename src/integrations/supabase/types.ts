@@ -1301,10 +1301,11 @@ export type Database = {
       adicionar_peca_rapida_atendimento: {
         Args: {
           _atendimento_id: string
-          _desconto_percentual?: number
+          _desconto_percentual: number
           _nome: string
           _preco_unitario: number
           _quantidade: number
+          _request_id: string
         }
         Returns: Json
       }
