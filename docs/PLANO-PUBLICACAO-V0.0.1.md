@@ -1,6 +1,6 @@
 # Plano faseado de publicação — DK Auto Center V.0.0.1
 
-**Estado: NÃO LIBERAR AINDA.** Trabalho somente na V.0.0.1, branch `fix/pecas-layout-desconto-atalho-20260930`, base `a8ad94f`. Commit local `9ce249d` criado; branch 1 commit à frente, sem push. A linha Financeiro está fora do escopo. Nenhuma migration foi aplicada e nenhum deploy foi feito.
+**Estado: NÃO LIBERAR AINDA.** Trabalho somente na V.0.0.1, branch `fix/pecas-layout-desconto-atalho-20260930`, base `a8ad94f`. Commits locais do pacote incluem `9ce249d` e `55f58c0`; sem push. A linha Financeiro está fora do escopo. Nenhuma migration foi aplicada e nenhum deploy foi feito.
 
 ## Estado e evidências
 
@@ -22,7 +22,7 @@ Manter apenas a V.0.0.1; não incorporar nem apagar funcionalidades/objetos da l
 
 ## Etapa 1 — candidato local: BUILD E INTERAÇÃO BÁSICA APROVADOS; INTEGRAÇÃO PENDENTE
 
-Alterações registradas no commit local `9ce249d`: layout/toasts da OS; scanner por teclado/câmera em Peças e OS; cadastro rápido de peça e aviso de pendência; desconto percentual manual; pagamento pendente; QR Pix, recibo e reimpressão; campos Pix configuráveis. Dependência QR e lockfile sincronizados.
+Alterações registradas nos commits locais `9ce249d` e `55f58c0`: layout/toasts da OS; scanner por teclado/câmera em Peças e OS; cadastro rápido de peça e aviso de pendência; desconto percentual manual; pagamento pendente; QR Pix, recibo e reimpressão; campos Pix configuráveis; retry idempotente de peça rápida com chave/payload por escopo; proteção da RPC legada de estoque para sempre registrar lote. Dependência QR e lockfile sincronizados.
 
 Correções locais: cadastro rápido só por gerente; peça pendente fora do seletor comum; associação via UPDATE captura snapshot e rejeita item pendente/excluído; trocar peça zera o desconto salvo para não transferi-lo. O 20% permanece apenas como valor inicial até confirmação gerencial. Alterações de mão de obra/quantidade estão incluídas no trigger de sincronização. Não há backfill em OS antigas.
 
@@ -54,4 +54,4 @@ Só após aprovação das etapas anteriores. Preview Netlify deve apontar à hom
 
 Apresentar SHA/arquivos, migration reconciliada, impacto, janela, backup e rollback. Só agir com aprovação específica; este roteiro não autoriza migration nem deploy.
 
-**Critério de liberação:** etapas 1–4 aprovadas, migrations reconciliadas, preview interativo, login/performance entendidos, permissões/triggers testados em staging e rollback pronto. Estado atual: commit local criado, sem push; hardening de idempotência, wrapper de estoque legado, isolamento de escopo e documentação ainda não commitados; build passa; homologação gratuita criada e saudável, porém vazia; migration não aplicada; 14 diagnósticos TypeScript fora das mudanças; parser aceita 51 statements, PL/pgSQL não executado; conector Netlify 401; produção sem escrita; deploy não autorizado.
+**Critério de liberação:** etapas 1–4 aprovadas, migrations reconciliadas, preview interativo, login/performance entendidos, permissões/triggers testados em staging e rollback pronto. Estado atual: pacote código+docs registrado localmente, sem push; build passa; homologação gratuita criada e saudável, porém vazia; migration não aplicada; 14 diagnósticos TypeScript fora das mudanças; parser aceita 51 statements, PL/pgSQL não executado; conector Netlify 401; produção sem escrita; deploy não autorizado.
