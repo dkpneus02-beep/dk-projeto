@@ -483,7 +483,7 @@ BEGIN
     RAISE EXCEPTION 'O preço unitário não pode ser negativo.';
   END IF;
   IF v_desconto < 0 OR v_desconto > 100 THEN
-    RAISE EXCEPTION 'O desconto deve ficar entre 0% e 100%.';
+    RAISE EXCEPTION 'O desconto deve ficar entre 0%% e 100%%.';
   END IF;
 
   INSERT INTO public.peca_rapida_idempotencia (
