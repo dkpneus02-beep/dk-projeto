@@ -1,6 +1,6 @@
 # Retomada — cadastro de peças e publicação V.0.0.1
 
-**Atualizado:** 18/11/2026, 16:27 (horário de Brasília)  
+**Atualizado:** 18/11/2026, 16:27 (horário de Brasília)
 **Objetivo imediato:** reconectar/verificar o Netlify e fechar a revisão local antes da decisão separada sobre push e publicação. A causa do erro visto na produção foi identificada; staging passou nos testes transacionais principais e produção segue sem alterações.
 
 ## Estado do repositório
