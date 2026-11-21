@@ -89,6 +89,7 @@ function AtendimentoPage() {
   >({});
   const [cameraServicoId, setCameraServicoId] = useState<string | null>(null);
   const [scannerServicoId, setScannerServicoId] = useState<string | null>(null);
+  const [precosUnitarios, setPrecosUnitarios] = useState<Record<string, string>>({});
   const [reciboPergunta, setReciboPergunta] = useState<null | {
     atendimento: Parameters<typeof printReceipt>[0];
     servicos: Parameters<typeof printReceipt>[1];
@@ -250,6 +251,10 @@ function AtendimentoPage() {
   const total = servicos.reduce((s, x) => s + Number(x.valor), 0);
   const todosConcluidos = servicos.length > 0 && servicos.every((s) => s.status === "concluido");
   const finalizado = data?.status === "finalizado";
+  const pagamentosPendentes = (data?.pagamentos ?? []).some((pagamento) => pagamento.pago === false);
+  const pagamentosRecebidos =
+    (data?.pagamentos ?? []).length > 0 &&
+    (data?.pagamentos ?? []).every((pagamento) => pagamento.pago === true);
   const aguardandoGerente = data?.status === "aguardando_gerente";
   const servicoScanner = servicos.find((servico) => servico.id === scannerServicoId);
   const scannerHabilitado = Boolean(
@@ -477,7 +482,7 @@ function AtendimentoPage() {
     toast.success("Foto removida da vistoria.");
   };
 
-  const gerarRecibo = async (marcarComoPago: boolean) => {
+  const gerarReciboPendente = async () => {
     if (!reciboPergunta) return;
     const win = window.open("", "_blank", "width=420,height=760");
     if (!win) {
@@ -486,10 +491,9 @@ function AtendimentoPage() {
     }
     win.document.write("<p style='font:16px Arial;padding:24px'>Preparando a nota…</p>");
     try {
-      if (marcarComoPago) await marcarAtendimentoPago.mutateAsync();
       const pagamentos = reciboPergunta.pagamentos.map((pagamento) => ({
         ...pagamento,
-        pago: marcarComoPago,
+        pago: false,
       }));
       const reciboGerado = await printReceipt(
         reciboPergunta.atendimento,
@@ -511,10 +515,9 @@ function AtendimentoPage() {
         return;
       }
       setReciboPergunta(null);
-      void navigate({ to: "/patio" });
     } catch (error) {
       win.document.body.textContent = error instanceof Error ? error.message : "Não foi possível gerar a nota.";
-      toast.error(error instanceof Error ? error.message : "Não foi possível registrar o pagamento.");
+      toast.error(error instanceof Error ? error.message : "Não foi possível gerar a nota.");
     }
   };
 
@@ -568,13 +571,15 @@ function AtendimentoPage() {
               Finalizado em {dt(data.finalizado_at)} · Total {brl(data.total)}
             </p>
             <p className="mt-1 text-sm font-medium">
-              {(data.pagamentos ?? []).some((pagamento) => pagamento.pago === false)
+              {pagamentosPendentes
                 ? "Pagamento pendente — ainda não lançado no caixa"
-                : "Pagamento recebido"}
+                : pagamentosRecebidos
+                  ? "Pagamento recebido"
+                  : "Pagamento não confirmado"}
             </p>
             <GarantiaTag ate={data.garantia_ate} km={data.garantia_km} kmEntrada={data.km} />
           </div>
-          {gerente && (data.pagamentos ?? []).some((pagamento) => pagamento.pago === false) && (
+          {gerente && pagamentosPendentes && (
             <ConfirmActionDialog
               trigger={
                 <Button disabled={marcarAtendimentoPago.isPending}>
@@ -603,7 +608,7 @@ function AtendimentoPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-        <section className="space-y-6">
+        <section className="min-w-0 space-y-6">
           <div className="card-surface p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-display text-xl font-bold uppercase">Serviços e peças</h2>
@@ -780,19 +785,25 @@ function AtendimentoPage() {
                       </Select>
                       </div>
                       <div className="space-y-1.5">
-                        <Label>Preço da peça (R$)</Label>
+                        <Label>Preço unitário da peça (R$)</Label>
                         <Input
                           type="number"
                           step="0.01"
                           className="num"
-                          key={`${s.id}-preco-${s.preco_peca ?? 0}`}
-                          defaultValue={Number(s.preco_peca ?? 0)}
-                          onBlur={(e) =>
+                          value={
+                            precosUnitarios[s.id] ??
+                            (Number(s.preco_peca ?? 0) / Math.max(Number(s.quantidade || 1), 0.01)).toFixed(2)
+                          }
+                          onChange={(e) =>
+                            setPrecosUnitarios((atual) => ({ ...atual, [s.id]: e.target.value }))
+                          }
+                          onBlur={(e) => {
+                            const precoUnitario = Math.max(Number(e.target.value) || 0, 0);
                             updServico.mutate({
                               sid: s.id,
-                              patch: { preco_peca: Math.max(Number(e.target.value) || 0, 0) },
-                            })
-                          }
+                              patch: { preco_peca: precoUnitario * Math.max(Number(s.quantidade || 1), 0.01) },
+                            });
+                          }}
                         />
                         <Label>Mão de obra/adicional (R$)</Label>
                         <Input
@@ -810,7 +821,7 @@ function AtendimentoPage() {
                         <p className="text-xs font-semibold text-primary">Total: <span className="num">{brl(s.valor)}</span></p>
                       </div>
                       <div
-                        className="grid min-w-0 gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[1fr_120px]"
+                        className="grid min-w-0 gap-2 rounded-md border border-primary/10 bg-primary/5 p-3 sm:col-span-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,220px)]"
                       >
                         <div className="space-y-1.5">
                           <Label>Produto/peça/óleo/pneu usado</Label>
@@ -873,12 +884,14 @@ function AtendimentoPage() {
                             value={s.peca_id ?? "none"}
                             onValueChange={(v) => {
                             const peca = (pecas ?? []).find((p) => p.id === v);
+                            const precoUnitario = peca && v !== "none" ? Number(peca.preco_venda) : 0;
+                            setPrecosUnitarios((atual) => ({ ...atual, [s.id]: precoUnitario.toFixed(2) }));
                             updServico.mutate({
                               sid: s.id,
                               patch: {
                                 peca_id: v === "none" ? null : v,
                                 quantidade: s.quantidade || 1,
-                                preco_peca: peca && v !== "none" ? Number(peca.preco_venda) * Number(s.quantidade || 1) : 0,
+                                preco_peca: precoUnitario * Number(s.quantidade || 1),
                               },
                             });
                           }}
@@ -916,29 +929,59 @@ function AtendimentoPage() {
                         </div>
                         <div className="space-y-1.5">
                           <Label>Quantidade usada</Label>
+                          <div className="flex min-w-0 gap-2">
+                            <Input
+                              key={`${s.id}-quantidade-${s.quantidade}`}
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              className="num min-w-0 flex-1"
+                              defaultValue={Number(s.quantidade || 1)}
+                              disabled={!s.peca_id}
+                              aria-label="Quantidade da peça"
+                              onBlur={(e) => {
+                                const quantidade = Math.max(Number(e.target.value) || 1, 0.01);
+                                const quantidadeAtual = Math.max(Number(s.quantidade || 1), 0.01);
+                                const precoUnitario = Math.max(
+                                  Number(
+                                    precosUnitarios[s.id] ??
+                                      (Number(s.preco_peca ?? 0) / quantidadeAtual).toFixed(2),
+                                  ) || 0,
+                                  0,
+                                );
+                                updServico.mutate({
+                                  sid: s.id,
+                                  patch: { quantidade, preco_peca: precoUnitario * quantidade },
+                                });
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0"
+                              disabled={!s.peca_id || updServico.isPending}
+                              onPointerDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                const quantidadeAtual = Math.max(Number(s.quantidade || 1), 0.01);
+                                const precoUnitario = Math.max(
+                                  Number(
+                                    precosUnitarios[s.id] ??
+                                      (Number(s.preco_peca ?? 0) / quantidadeAtual).toFixed(2),
+                                  ) || 0,
+                                  0,
+                                );
+                                const quantidade = quantidadeAtual + 1;
+                                updServico.mutate({
+                                  sid: s.id,
+                                  patch: { quantidade, preco_peca: precoUnitario * quantidade },
+                                });
+                              }}
+                            >
+                              +1 peça
+                            </Button>
+                          </div>
                         </div>
-                        <Input
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          className="num"
-                          defaultValue={Number(s.quantidade || 1)}
-                          disabled={!s.peca_id}
-                          aria-label="Quantidade da peça"
-                          onBlur={(e) => {
-                            const quantidade = Math.max(Number(e.target.value) || 1, 0.01);
-                            const pecaSelecionada = (pecas ?? []).find((p) => p.id === s.peca_id);
-                            updServico.mutate({
-                              sid: s.id,
-                              patch: {
-                                quantidade,
-                                ...(pecaSelecionada
-                                  ? { preco_peca: Number(pecaSelecionada.preco_venda) * quantidade }
-                                  : {}),
-                              },
-                            });
-                          }}
-                        />
                         </div>
                       </div>
                     </div>
@@ -1337,32 +1380,22 @@ function AtendimentoPage() {
                 Atendimento finalizado
               </AlertDialogTitle>
               <AlertDialogDescription>
-                O cliente já pagou o valor da OS? Só confirme se o dinheiro foi efetivamente recebido. Se ainda não pagou, o recebimento continuará pendente e a nota mostrará QR Pix apenas para a parte Pix.
+                A OS foi finalizada, mas nenhum recebimento será lançado automaticamente. Se o
+                cliente já pagou, feche este aviso e use “Confirmar recebimento” na tela da OS; isso
+                lançará os pagamentos no caixa aberto. A nota abaixo mantém o pagamento pendente e
+                mostra o QR Pix quando aplicável.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel
-                onClick={() => {
-                  setReciboPergunta(null);
-                  void navigate({ to: "/patio" });
-                }}
-              >
-                Agora não
+              <AlertDialogCancel onClick={() => setReciboPergunta(null)}>
+                Fechar e confirmar na OS
               </AlertDialogCancel>
               <Button
                 type="button"
                 variant="outline"
-                disabled={marcarAtendimentoPago.isPending}
-                onClick={() => void gerarRecibo(false)}
+                onClick={() => void gerarReciboPendente()}
               >
-                Ainda não pagou — {reciboPergunta.pagamentos.some((p) => p.forma.toLocaleLowerCase("pt-BR") === "pix") ? "QR Pix" : "nota pendente"}
-              </Button>
-              <Button
-                type="button"
-                disabled={marcarAtendimentoPago.isPending}
-                onClick={() => void gerarRecibo(true)}
-              >
-                Já pagou — registrar no caixa
+                Gerar nota com pagamento pendente
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -1730,23 +1763,25 @@ function FinalizarDialog({
     return () => window.removeEventListener("keydown", abrirConfiguracaoPix, true);
   }, []);
 
-  const [pagamentos, setPagamentos] = useState([{ forma: "Dinheiro", valor: bruto, parcelas: 1 }]);
+  const [pagamentos, setPagamentos] = useState([
+    { forma: "Dinheiro", valor: bruto.toFixed(2), parcelas: 1 },
+  ]);
   const liquido = Math.max(bruto - desconto, 0);
   useEffect(() => {
-    if (pagamentos.length !== 1 || pagamentos[0]?.valor === liquido) return;
-
     setPagamentos((atual) => {
       const unico = atual[0];
       if (atual.length !== 1 || !unico) return atual;
-      return [{ ...unico, valor: liquido }];
+      const valorLiquido = liquido.toFixed(2);
+      if (unico.valor === valorLiquido) return atual;
+      return [{ ...unico, valor: valorLiquido }];
     });
-  }, [liquido, pagamentos]);
+  }, [liquido]);
   const somaPag = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
   const ok = Math.abs(somaPag - liquido) < 0.01;
-  const pagamentosParaEnviar =
-    pagamentos.length === 1
-      ? pagamentos.map((pagamento) => ({ ...pagamento, valor: Number(liquido.toFixed(2)) }))
-      : pagamentos;
+  const pagamentosParaEnviar = pagamentos.map((pagamento) => ({
+    ...pagamento,
+    valor: Number(pagamento.valor),
+  }));
   const descontosParaEnviar = pecasDaOs.map((servico) => ({
     servico_id: servico.id,
     percentual: elegivelNoCatalogo(servico) ? percentualDesconto(servico) : 0,
@@ -1862,14 +1897,14 @@ function FinalizarDialog({
         <div className="space-y-2">
           <Label>Pagamentos</Label>
           {pagamentos.map((p, i) => (
-            <div key={i} className="flex gap-2">
+            <div key={i} className="flex min-w-0 flex-wrap gap-2">
               <Select
                 value={p.forma}
                 onValueChange={(v) =>
                   setPagamentos((ps) => ps.map((x, j) => (i === j ? { ...x, forma: v } : x)))
                 }
               >
-                <SelectTrigger className="flex-1">
+                <SelectTrigger className="min-w-0 flex-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1904,11 +1939,11 @@ function FinalizarDialog({
               <Input
                 type="number"
                 step="0.01"
-                className="num w-32"
+                className="num min-w-0 basis-32 flex-1"
                 value={p.valor}
                 onChange={(e) =>
                   setPagamentos((ps) =>
-                    ps.map((x, j) => (i === j ? { ...x, valor: Number(e.target.value) } : x)),
+                    ps.map((x, j) => (i === j ? { ...x, valor: e.target.value } : x)),
                   )
                 }
               />
@@ -1929,7 +1964,7 @@ function FinalizarDialog({
             onClick={() =>
               setPagamentos((ps) => [
                 ...ps,
-                { forma: "PIX", valor: Math.max(liquido - somaPag, 0), parcelas: 1 },
+                { forma: "PIX", valor: Math.max(liquido - somaPag, 0).toFixed(2), parcelas: 1 },
               ])
             }
           >
