@@ -95,6 +95,9 @@ function AtendimentoPage() {
     servicos: Parameters<typeof printReceipt>[1];
     pagamentos: Parameters<typeof printReceipt>[2];
   }>(null);
+  const [perguntaFinalizarTudo, setPerguntaFinalizarTudo] = useState(false);
+  const [finalizandoTudo, setFinalizandoTudo] = useState(false);
+  const finalizacaoTudoEmAndamentoRef = useRef(false);
 
   useEffect(() => {
     pecaRapidaStorageKeyRef.current = pecaRapidaStorageKey;
@@ -514,10 +517,82 @@ function AtendimentoPage() {
         toast.error("Não foi possível preparar a nota. Confira a configuração Pix e tente novamente.");
         return;
       }
+      setPerguntaFinalizarTudo(false);
       setReciboPergunta(null);
     } catch (error) {
       win.document.body.textContent = error instanceof Error ? error.message : "Não foi possível gerar a nota.";
       toast.error(error instanceof Error ? error.message : "Não foi possível gerar a nota.");
+    }
+  };
+
+  const finalizarTudo = async (imprimirNota: boolean) => {
+    const recibo = reciboPergunta;
+    if (!recibo || finalizandoTudo || finalizacaoTudoEmAndamentoRef.current) return;
+
+    const win = imprimirNota ? window.open("", "_blank", "width=420,height=760") : null;
+    if (imprimirNota && !win) {
+      toast.error("Permita a abertura da janela para imprimir a nota.");
+      return;
+    }
+    if (win) {
+      win.document.write(
+        "<p style='font:16px Arial;padding:24px'>Registrando o recebimento e preparando a nota…</p>",
+      );
+    }
+
+    finalizacaoTudoEmAndamentoRef.current = true;
+    setFinalizandoTudo(true);
+    try {
+      await marcarAtendimentoPago.mutateAsync();
+    } catch {
+      if (win && !win.closed) win.close();
+      finalizacaoTudoEmAndamentoRef.current = false;
+      setFinalizandoTudo(false);
+      return;
+    }
+
+    setPerguntaFinalizarTudo(false);
+    setReciboPergunta(null);
+    try {
+      if (win) {
+        const reciboGerado = await printReceipt(
+          recibo.atendimento,
+          recibo.servicos,
+          recibo.pagamentos.map((pagamento) => ({ ...pagamento, pago: true })),
+          {
+            nome_oficina: config?.nome_oficina || "DK Auto Center",
+            endereco: config?.endereco ?? "",
+            telefone: config?.telefone ?? "",
+            cnpj: config?.cnpj ?? "",
+            pix_chave: config?.pix_chave ?? "32801574000155",
+            pix_nome_recebedor: config?.pix_nome_recebedor ?? "DK AUTO CENTER",
+            pix_cidade: config?.pix_cidade ?? "SALGUEIRO",
+          },
+          win,
+        );
+        if (reciboGerado) {
+          try {
+            win.print();
+          } catch {
+            toast.error("Recebimento registrado. A nota ficou aberta para imprimir manualmente.");
+          }
+        } else {
+          toast.error(
+            "Recebimento registrado. Não foi possível preparar a nota; você pode reimprimi-la pelo Histórico.",
+          );
+        }
+      }
+    } catch {
+      toast.error(
+        "Recebimento registrado. Não foi possível preparar a nota; você pode reimprimi-la pelo Histórico.",
+      );
+    }
+    try {
+      await navigate({ to: "/historico" });
+    } catch {
+      toast.error("Recebimento registrado. Acesse o Histórico pelo menu.");
+    } finally {
+      setFinalizandoTudo(false);
     }
   };
 
@@ -1355,6 +1430,7 @@ function AtendimentoPage() {
           onDone={(resultado) => {
             setFinalizando(false);
             void qc.invalidateQueries();
+            setPerguntaFinalizarTudo(false);
             setReciboPergunta({
               atendimento: {
                 numero: data.numero,
@@ -1389,26 +1465,82 @@ function AtendimentoPage() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="font-display uppercase">
-                Atendimento finalizado
+                {perguntaFinalizarTudo
+                  ? "Finalizar tudo e ir ao Histórico?"
+                  : "Atendimento finalizado"}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                A OS foi finalizada, mas nenhum recebimento será lançado automaticamente. Se o
-                cliente já pagou, feche este aviso e use “Confirmar recebimento” na tela da OS; isso
-                lançará os pagamentos no caixa aberto. A nota abaixo mantém o pagamento pendente e
-                mostra o QR Pix quando aplicável.
+                {perguntaFinalizarTudo ? (
+                  <>
+                    Esta opção registra como recebido no caixa aberto todos os pagamentos informados
+                    e libera a OS para o Histórico. Deseja gerar e imprimir a notinha agora? Se
+                    escolher não, o recebimento também será registrado, mas sem imprimir.
+                  </>
+                ) : (
+                  <>
+                    A OS foi finalizada, mas nenhum recebimento será lançado automaticamente. Se o
+                    cliente já pagou, feche este aviso e use “Confirmar recebimento” na tela da OS; isso
+                    lançará os pagamentos no caixa aberto. A nota abaixo mantém o pagamento pendente e
+                    mostra o QR Pix quando aplicável.
+                  </>
+                )}
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setReciboPergunta(null)}>
-                Fechar e confirmar na OS
-              </AlertDialogCancel>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void gerarReciboPendente()}
-              >
-                Gerar nota com pagamento pendente
-              </Button>
+            <AlertDialogFooter className="flex-wrap gap-2">
+              {perguntaFinalizarTudo ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={finalizandoTudo}
+                    onClick={() => setPerguntaFinalizarTudo(false)}
+                  >
+                    Voltar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={finalizandoTudo}
+                    onClick={() => void finalizarTudo(false)}
+                  >
+                    Não imprimir; registrar e ir ao Histórico
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={finalizandoTudo}
+                    onClick={() => void finalizarTudo(true)}
+                  >
+                    Sim, registrar, imprimir e ir ao Histórico
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <AlertDialogCancel
+                    disabled={finalizandoTudo}
+                    onClick={() => {
+                      setPerguntaFinalizarTudo(false);
+                      setReciboPergunta(null);
+                    }}
+                  >
+                    Fechar e confirmar na OS
+                  </AlertDialogCancel>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={finalizandoTudo}
+                    onClick={() => void gerarReciboPendente()}
+                  >
+                    Gerar nota com pagamento pendente
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={finalizandoTudo}
+                    onClick={() => setPerguntaFinalizarTudo(true)}
+                  >
+                    Finalizar tudo e ir ao Histórico
+                  </Button>
+                </>
+              )}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
