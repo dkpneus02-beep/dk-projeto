@@ -93,6 +93,8 @@ function Historico() {
   const lista = useMemo(() => {
     const hoje = new Date().toISOString().slice(0, 10);
     return (data ?? []).filter((a) => {
+      const pagamentoPendente = (a.pagamentos ?? []).some((pagamento) => pagamento.pago === false);
+      if (a.status === "finalizado" && pagamentoPendente) return false;
       const naGarantia = a.garantia_ate ? a.garantia_ate >= hoje : false;
       if (tab === "garantia" && !naGarantia) return false;
       if (tab === "fora" && naGarantia) return false;
@@ -209,6 +211,14 @@ function Historico() {
                                   cliente_nome: a.cliente_nome ?? "",
                                   cliente_telefone: a.cliente_telefone,
                                   desconto: Number(a.desconto ?? 0),
+                                  desconto_balcao: a.desconto_balcao,
+                                  desconto_pecas:
+                                    a.desconto_balcao == null
+                                      ? null
+                                      : Math.max(
+                                          Number(a.desconto ?? 0) - Number(a.desconto_balcao),
+                                          0,
+                                        ),
                                   total: Number(a.total),
                                   finalizado_at: a.finalizado_at,
                                   garantia_ate: a.garantia_ate,

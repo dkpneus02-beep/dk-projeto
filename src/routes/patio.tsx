@@ -1,10 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { NovoAtendimentoDialog } from "@/components/NovoAtendimentoDialog";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
+import { Button } from "@/components/ui/button";
 import { brl, dt, statusLabel } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import { isGerente } from "@/lib/permissions";
 
 export const Route = createFileRoute("/patio")({
   head: () => ({
@@ -25,21 +30,49 @@ export function usePatio() {
   return useQuery({
     queryKey: ["patio"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("atendimentos")
-        .select("*, atendimento_servicos(id, nome, status, valor)")
-        .eq("status", "aberto")
-        .is("deleted_at", null)
-        .order("entrada_at", { ascending: true });
-      if (error) throw error;
-      return data;
+      const [abertos, aguardandoPagamento] = await Promise.all([
+        supabase
+          .from("atendimentos")
+          .select("*, atendimento_servicos(id, nome, status, valor), pagamentos(pago)")
+          .eq("status", "aberto")
+          .is("deleted_at", null)
+          .order("entrada_at", { ascending: true }),
+        supabase
+          .from("atendimentos")
+          .select("*, atendimento_servicos(id, nome, status, valor), pagamentos!inner(pago)")
+          .eq("status", "finalizado")
+          .eq("pagamentos.pago", false)
+          .is("deleted_at", null)
+          .order("entrada_at", { ascending: true }),
+      ]);
+      if (abertos.error) throw abertos.error;
+      if (aguardandoPagamento.error) throw aguardandoPagamento.error;
+      return [...(abertos.data ?? []), ...(aguardandoPagamento.data ?? [])].sort(
+        (a, b) => new Date(a.entrada_at).getTime() - new Date(b.entrada_at).getTime(),
+      );
     },
   });
 }
 
 function Patio() {
+  const { role } = useAuth();
+  const gerente = isGerente(role);
+  const qc = useQueryClient();
   const { data, isLoading } = usePatio();
   const carros = data ?? [];
+  const marcarAtendimentoPago = useMutation({
+    mutationFn: async (atendimentoId: string) => {
+      const { error } = await supabase.rpc("marcar_atendimento_pago", {
+        _atendimento_id: atendimentoId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Pagamento registrado no caixa; a OS foi liberada para o Histórico.");
+      void qc.invalidateQueries();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   return (
     <AppShell>
@@ -52,7 +85,7 @@ function Patio() {
         <div className="h-2 w-40 overflow-hidden rounded-full bg-muted">
           <div
             className="h-full bg-primary transition-all"
-            style={{ width: `${(carros.length / 5) * 100}%` }}
+            style={{ width: `${Math.min((carros.length / 5) * 100, 100)}%` }}
           />
         </div>
         {carros.length >= 5 && (
@@ -68,37 +101,71 @@ function Patio() {
         {carros.map((c) => {
           const servicos = c.atendimento_servicos ?? [];
           const concluidos = servicos.filter((s) => s.status === "concluido").length;
-          const total = servicos.reduce((sum, s) => sum + Number(s.valor), 0);
+          const totalServicos = servicos.reduce((sum, s) => sum + Number(s.valor), 0);
           const emExec = servicos.some((s) => s.status === "em_execucao");
+          const pagamentosPendentes = (c.pagamentos ?? []).some((p) => p.pago === false);
+          const aguardandoPagamento = c.status === "finalizado" && pagamentosPendentes;
           return (
-            <Link
-              key={c.id}
-              to="/atendimento/$id"
-              params={{ id: c.id }}
-              className="card-surface block p-5 transition-shadow hover:shadow-md"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-display text-2xl font-bold tracking-wider">{c.placa}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {[c.fabricante, c.modelo, c.cor].filter(Boolean).join(" · ") || "Veículo"}
-                  </p>
+            <div key={c.id} className="card-surface p-5 transition-shadow hover:shadow-md">
+              <Link
+                to="/atendimento/$id"
+                params={{ id: c.id }}
+                className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-display text-2xl font-bold tracking-wider">{c.placa}</p>
+                    <p className="break-words text-sm text-muted-foreground">
+                      {[c.fabricante, c.modelo, c.cor].filter(Boolean).join(" · ") || "Veículo"}
+                    </p>
+                  </div>
+                  <Badge
+                    variant={aguardandoPagamento ? "outline" : emExec ? "default" : "secondary"}
+                  >
+                    {aguardandoPagamento
+                      ? "Aguardando pagamento"
+                      : emExec
+                        ? statusLabel["em_execucao"]
+                        : "Aguardando"}
+                  </Badge>
                 </div>
-                <Badge variant={emExec ? "default" : "secondary"}>
-                  {emExec ? statusLabel["em_execucao"] : "Aguardando"}
-                </Badge>
-              </div>
-              <dl className="mt-4 space-y-1 text-sm">
-                <Row label="Cliente" value={c.cliente_nome} />
-                <Row label="Entrada" value={dt(c.entrada_at)} />
-                <Row
-                  label="Serviços"
-                  value={`${concluidos}/${servicos.length} concluídos`}
+                <dl className="mt-4 space-y-1 text-sm">
+                  <Row label="Cliente" value={c.cliente_nome ?? "—"} />
+                  <Row label="Entrada" value={dt(c.entrada_at)} />
+                  <Row label="Serviços" value={`${concluidos}/${servicos.length} concluídos`} />
+                  <Row
+                    label="Total"
+                    value={brl(aguardandoPagamento ? c.total : totalServicos)}
+                    strong
+                  />
+                </dl>
+                <p className="mt-3 text-xs text-muted-foreground">OS #{c.numero}</p>
+                {aguardandoPagamento && (
+                  <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm font-medium text-amber-900">
+                    Serviço concluído. O veículo continua no pátio aguardando o pagamento.
+                  </p>
+                )}
+              </Link>
+              {aguardandoPagamento && gerente && (
+                <ConfirmActionDialog
+                  trigger={
+                    <Button className="mt-4 w-full" disabled={marcarAtendimentoPago.isPending}>
+                      <i className="fa-solid fa-cash-register" /> Confirmar pagamento
+                    </Button>
+                  }
+                  title="Confirmar pagamento e liberar a OS"
+                  description={
+                    <>
+                      Confirma que recebeu{" "}
+                      <strong className="text-foreground">{brl(c.total)}</strong>? O valor será
+                      lançado no caixa aberto e a OS deixará o Pátio para aparecer no Histórico.
+                    </>
+                  }
+                  confirmLabel="Sim, registrar no caixa"
+                  onConfirm={() => marcarAtendimentoPago.mutateAsync(c.id)}
                 />
-                <Row label="Total" value={brl(total)} strong />
-              </dl>
-              <p className="mt-3 text-xs text-muted-foreground">OS #{c.numero}</p>
-            </Link>
+              )}
+            </div>
           );
         })}
       </div>

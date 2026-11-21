@@ -165,6 +165,7 @@ export type Database = {
           data_retorno_manual: string | null
           deleted_at: string | null
           desconto: number
+          desconto_balcao: number | null
           entrada_at: string
           fabricante: string | null
           finalizado_at: string | null
@@ -197,6 +198,7 @@ export type Database = {
           data_retorno_manual?: string | null
           deleted_at?: string | null
           desconto?: number
+          desconto_balcao?: number | null
           entrada_at?: string
           fabricante?: string | null
           finalizado_at?: string | null
@@ -229,6 +231,7 @@ export type Database = {
           data_retorno_manual?: string | null
           deleted_at?: string | null
           desconto?: number
+          desconto_balcao?: number | null
           entrada_at?: string
           fabricante?: string | null
           finalizado_at?: string | null
@@ -1361,6 +1364,17 @@ export type Database = {
         Args: {
           _atendimento_id: string
           _data_retorno_manual?: string
+          _descontos?: Json
+          _necessita_retorno?: boolean
+          _pagamentos: Json
+        }
+        Returns: Json
+      }
+      finalizar_atendimento_transacional_v2: {
+        Args: {
+          _atendimento_id: string
+          _data_retorno_manual?: string
+          _desconto_balcao: number
           _descontos?: Json
           _necessita_retorno?: boolean
           _pagamentos: Json

@@ -11,6 +11,8 @@ export type ReciboAtendimento = {
   cliente_nome: string;
   cliente_telefone: string | null;
   desconto: number;
+  desconto_pecas?: number | null;
+  desconto_balcao?: number | null;
   total: number;
   finalizado_at: string | null;
   garantia_ate: string | null;
@@ -37,6 +39,11 @@ export function buildReceiptHtml(
   pix?: { payload: string; valor: number; chave: string; whatsappUrl: string; qrDataUrl: string },
 ): string {
   const bruto = servicos.reduce((s, x) => s + Number(x.valor), 0);
+  const descontoTotal = Number(atendimento.desconto || 0);
+  const linhasDescontos =
+    atendimento.desconto_balcao == null
+      ? `<tr><td>Desconto</td><td class="num">- ${brl(descontoTotal)}</td></tr>`
+      : `<tr><td>Desconto nas peças</td><td class="num">- ${brl(atendimento.desconto_pecas ?? Math.max(descontoTotal - atendimento.desconto_balcao, 0))}</td></tr><tr><td>Desconto do balcão</td><td class="num">- ${brl(atendimento.desconto_balcao)}</td></tr>`;
   const linhasServicos = servicos
     .map(
       (s) =>
@@ -101,7 +108,7 @@ export function buildReceiptHtml(
   <hr />
   <table>
     <tr><td>Subtotal</td><td class="num">${brl(bruto)}</td></tr>
-    <tr><td>Desconto</td><td class="num">- ${brl(atendimento.desconto)}</td></tr>
+    ${linhasDescontos}
     <tr class="total"><td>TOTAL</td><td class="num">${brl(atendimento.total)}</td></tr>
   </table>
   <hr />

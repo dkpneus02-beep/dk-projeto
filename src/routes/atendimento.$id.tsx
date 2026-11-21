@@ -572,7 +572,7 @@ function AtendimentoPage() {
             </p>
             <p className="mt-1 text-sm font-medium">
               {pagamentosPendentes
-                ? "Pagamento pendente — ainda não lançado no caixa"
+                ? "Aguardando pagamento — o veículo permanece no pátio até a confirmação"
                 : pagamentosRecebidos
                   ? "Pagamento recebido"
                   : "Pagamento não confirmado"}
@@ -583,12 +583,12 @@ function AtendimentoPage() {
             <ConfirmActionDialog
               trigger={
                 <Button disabled={marcarAtendimentoPago.isPending}>
-                  <i className="fa-solid fa-cash-register" /> Confirmar recebimento
+                  <i className="fa-solid fa-cash-register" /> Pagamento feito e concluir OS
                 </Button>
               }
               title="Confirmar recebimento da OS"
-              description={<>Confirma que recebeu <strong className="text-foreground">{brl(data.total)}</strong>? Os pagamentos serão lançados no caixa aberto.</>}
-              confirmLabel="Sim, registrar no caixa"
+              description={<>Confirma que recebeu <strong className="text-foreground">{brl(data.total)}</strong>? Os pagamentos serão lançados no caixa aberto e a OS sairá do pátio para o Histórico.</>}
+              confirmLabel="Sim, registrar e concluir"
               onConfirm={() => marcarAtendimentoPago.mutateAsync()}
             />
           )}
@@ -896,9 +896,9 @@ function AtendimentoPage() {
                             });
                           }}
                         >
-                          <SelectTrigger className="min-w-0 max-w-full">
+                          <SelectTrigger className="h-auto min-h-9 min-w-0 max-w-full whitespace-normal [&>span]:line-clamp-none">
                             <SelectValue
-                              className="min-w-0 flex-1 truncate"
+                              className="min-w-0 flex-1 whitespace-normal break-words text-left"
                               placeholder="Peça/óleo/pneu usado (opcional)"
                             />
                           </SelectTrigger>
@@ -912,7 +912,7 @@ function AtendimentoPage() {
                                 value={p.id}
                                 className="min-w-0 whitespace-normal"
                               >
-                                <span className="block min-w-0 max-w-full break-words">
+                                <span className="block w-full min-w-0 max-w-full break-words">
                                   {p.nome} · {p.tipo === "pneu" ? "pneu" : "peça/insumo"} ·
                                   estoque {Number(p.estoque)} · {brl(p.preco_venda)}
                                 </span>
@@ -1228,7 +1228,17 @@ function AtendimentoPage() {
             <Info label="Total dos serviços" value={brl(total)} />
             {finalizado && (
               <>
-                <Info label="Desconto" value={brl(data.desconto)} />
+                {data.desconto_balcao == null ? (
+                  <Info label="Desconto" value={brl(data.desconto)} />
+                ) : (
+                  <>
+                    <Info
+                      label="Desconto nas peças"
+                      value={brl(Math.max(Number(data.desconto) - Number(data.desconto_balcao), 0))}
+                    />
+                    <Info label="Desconto do balcão" value={brl(Number(data.desconto_balcao))} />
+                  </>
+                )}
                 <Info label="Total da OS" value={brl(data.total)} />
                 <div className="pt-2">
                   {(data.pagamentos ?? []).map((p) => (
@@ -1355,6 +1365,8 @@ function AtendimentoPage() {
                 cliente_nome: data.cliente_nome ?? "",
                 cliente_telefone: data.cliente_telefone,
                 desconto: resultado.desconto,
+                desconto_pecas: resultado.desconto_pecas,
+                desconto_balcao: resultado.desconto_balcao,
                 total: resultado.total,
                 finalizado_at: new Date().toISOString(),
                 garantia_ate: resultado.garantia_ate,
@@ -1719,6 +1731,8 @@ function FinalizarDialog({
   onClose: () => void;
   onDone: (resultado: {
     desconto: number;
+    desconto_pecas: number;
+    desconto_balcao: number;
     total: number;
     garantia_ate: string | null;
     pagamentos: { forma: string; valor: number; parcelas: number }[];
@@ -1742,6 +1756,22 @@ function FinalizarDialog({
     if (!elegivelNoCatalogo(servico)) return soma;
     return soma + Math.round(Number(servico.preco_peca ?? 0) * percentualDesconto(servico)) / 100;
   }, 0);
+  const descontoAposPecas = Math.max(bruto - desconto, 0);
+  const [valorFinalManual, setValorFinalManual] = useState<string | null>(null);
+  const valorFinalInformado =
+    valorFinalManual === null
+      ? descontoAposPecas
+      : valorFinalManual.trim() === ""
+        ? Number.NaN
+        : Number(valorFinalManual);
+  const valorFinalValido =
+    Number.isFinite(valorFinalInformado) &&
+    valorFinalInformado >= 0 &&
+    valorFinalInformado <= descontoAposPecas + 0.005;
+  const liquido = valorFinalValido ? Math.round(valorFinalInformado * 100) / 100 : 0;
+  const descontoBalcao = valorFinalValido
+    ? Math.max(Math.round((descontoAposPecas - liquido) * 100) / 100, 0)
+    : 0;
 
   useEffect(() => {
     const abrirConfiguracaoPix = (event: KeyboardEvent) => {
@@ -1766,8 +1796,8 @@ function FinalizarDialog({
   const [pagamentos, setPagamentos] = useState([
     { forma: "Dinheiro", valor: bruto.toFixed(2), parcelas: 1 },
   ]);
-  const liquido = Math.max(bruto - desconto, 0);
   useEffect(() => {
+    if (!valorFinalValido) return;
     setPagamentos((atual) => {
       const unico = atual[0];
       if (atual.length !== 1 || !unico) return atual;
@@ -1775,9 +1805,9 @@ function FinalizarDialog({
       if (unico.valor === valorLiquido) return atual;
       return [{ ...unico, valor: valorLiquido }];
     });
-  }, [liquido]);
+  }, [liquido, valorFinalValido]);
   const somaPag = pagamentos.reduce((s, p) => s + Number(p.valor || 0), 0);
-  const ok = Math.abs(somaPag - liquido) < 0.01;
+  const ok = valorFinalValido && Math.abs(somaPag - liquido) < 0.01;
   const pagamentosParaEnviar = pagamentos.map((pagamento) => ({
     ...pagamento,
     valor: Number(pagamento.valor),
@@ -1794,33 +1824,49 @@ function FinalizarDialog({
 
   const finalizar = useMutation({
     mutationFn: async () => {
-      const { data: resultado, error } = await supabase.rpc("finalizar_atendimento_transacional", {
-        _atendimento_id: atendimento.id,
-        _descontos: descontosParaEnviar,
-        _pagamentos: pagamentosParaEnviar.map((p) => ({
-          forma: p.forma,
-          valor: Number(p.valor),
-          parcelas: p.parcelas,
-        })),
-        _necessita_retorno: necessitaRetorno,
-        ...(necessitaRetorno && dataRetorno ? { _data_retorno_manual: dataRetorno } : {}),
-      });
+      const { data: resultado, error } = await supabase.rpc(
+        "finalizar_atendimento_transacional_v2",
+        {
+          _atendimento_id: atendimento.id,
+          _descontos: descontosParaEnviar,
+          _pagamentos: pagamentosParaEnviar.map((p) => ({
+            forma: p.forma,
+            valor: Number(p.valor),
+            parcelas: p.parcelas,
+          })),
+          _necessita_retorno: necessitaRetorno,
+          _desconto_balcao: descontoBalcao,
+          ...(necessitaRetorno && dataRetorno ? { _data_retorno_manual: dataRetorno } : {}),
+        },
+      );
       if (error) throw error;
       const retorno = resultado as {
         garantia_ate?: string | null;
         desconto?: number;
+        desconto_pecas?: number;
+        desconto_balcao?: number;
         total?: number;
       } | null;
       return {
         garantiaAteStr: retorno?.garantia_ate ?? null,
         desconto: Number(retorno?.desconto ?? desconto),
+        descontoPecas: Number(retorno?.desconto_pecas ?? desconto),
+        descontoBalcao: Number(retorno?.desconto_balcao ?? descontoBalcao),
         total: Number(retorno?.total ?? liquido),
       };
     },
-    onSuccess: ({ garantiaAteStr, desconto: descontoFinal, total: totalFinal }) => {
+    onSuccess: ({
+      garantiaAteStr,
+      desconto: descontoFinal,
+      descontoPecas,
+      descontoBalcao: descontoBalcaoFinal,
+      total: totalFinal,
+    }) => {
       toast.success("OS finalizada; pagamentos ficaram pendentes até confirmar o recebimento.");
       onDone({
         desconto: descontoFinal,
+        desconto_pecas: descontoPecas,
+        desconto_balcao: descontoBalcaoFinal,
         total: totalFinal,
         garantia_ate: garantiaAteStr,
         pagamentos: pagamentosParaEnviar.map((pagamento) => ({ ...pagamento, pago: false })),
@@ -1885,12 +1931,33 @@ function FinalizarDialog({
             </div>
             <p className="num font-semibold">{brl(desconto)}</p>
             <p className="text-xs text-muted-foreground">
-              Percentuais definidos manualmente. O padrão para novas peças elegíveis é 20%; vale para qualquer forma de pagamento.
+              Percentuais definidos manualmente. O padrão para novas peças elegíveis é 20%; vale
+              para qualquer forma de pagamento.
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label>Valor final</Label>
-            <p className="num font-display text-2xl font-bold">{brl(liquido)}</p>
+            <Label htmlFor="valor-final-atendimento">Valor final combinado (R$)</Label>
+            <Input
+              id="valor-final-atendimento"
+              type="number"
+              min="0"
+              max={descontoAposPecas.toFixed(2)}
+              step="0.01"
+              className="num font-display text-xl font-bold"
+              value={valorFinalManual ?? descontoAposPecas.toFixed(2)}
+              onChange={(event) => setValorFinalManual(event.target.value)}
+              onBlur={() => {
+                if (valorFinalManual?.trim() === "") setValorFinalManual(null);
+              }}
+            />
+            <p className="num text-sm font-semibold text-primary">
+              Desconto do balcão: {brl(descontoBalcao)}
+            </p>
+            {!valorFinalValido && (
+              <p className="text-xs text-destructive">
+                Informe um valor final entre R$ 0,00 e {brl(descontoAposPecas)}.
+              </p>
+            )}
           </div>
         </div>
 
@@ -1972,7 +2039,8 @@ function FinalizarDialog({
           </Button>
           {!ok && (
             <p className="text-sm text-destructive">
-              A soma dos pagamentos ({brl(somaPag)}) precisa ser igual a {brl(liquido)}.
+              A soma dos pagamentos ({brl(somaPag)}) precisa ser igual ao valor final{" "}
+              {valorFinalValido ? brl(liquido) : "informado"}.
             </p>
           )}
         </div>
