@@ -197,9 +197,10 @@ function Historico() {
                       <div className="flex justify-end gap-1">
                         {finalizado && (
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Imprimir notinha / recibo"
+                            variant="outline"
+                            size="sm"
+                            className="whitespace-nowrap"
+                            title="Imprimir ou reimprimir sem alterar o pagamento ou o caixa"
                             onClick={() =>
                               printReceipt(
                                 {
@@ -252,7 +253,7 @@ function Historico() {
                               )
                             }
                           >
-                            <i className="fa-solid fa-receipt" />
+                            <><i className="fa-solid fa-receipt" /> Reimprimir nota</>
                           </Button>
                         )}
                         {finalizado && (

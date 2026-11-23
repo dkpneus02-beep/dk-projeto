@@ -69,20 +69,24 @@ export function buildReceiptHtml(
 <style>
   @page { size: 80mm auto; margin: 0; }
   * { box-sizing: border-box; }
-  body { width: 80mm; margin: 0 auto; padding: 5mm 4mm; font-family: Arial, sans-serif; font-size: 11px; color: #000; }
-  h1 { font-size: 15px; text-align: center; margin: 0 0 2px; text-transform: uppercase; }
+  body { width: 80mm; margin: 0 auto; padding: 5mm 4mm; font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.4; color: #000; }
+  h1 { font-size: 16px; font-weight: 800; text-align: center; margin: 0 0 3px; text-transform: uppercase; }
   .center { text-align: center; }
-  .muted { color: #333; }
-  hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+  .muted { color: #000; font-weight: 700; letter-spacing: .15px; }
+  hr { border: none; border-top: 1px solid #000; margin: 7px 0; }
   table { width: 100%; border-collapse: collapse; }
-  td { padding: 2px 0; vertical-align: top; }
-  td.num { text-align: right; white-space: nowrap; }
-  .total { font-size: 14px; font-weight: bold; }
-  .foot { margin-top: 8px; text-align: center; font-size: 10px; }
-  .pix { padding: 3mm 0; font-size: 11px; }
+  td { padding: 3px 0; vertical-align: top; }
+  td.label { width: 28%; padding-right: 2mm; font-weight: 700; }
+  td.value { text-align: left; overflow-wrap: anywhere; word-break: normal; }
+  td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .items td:first-child { width: 68%; padding-right: 2mm; overflow-wrap: anywhere; word-break: break-word; }
+  .items td.num { width: 32%; }
+  .total { font-size: 15px; font-weight: 800; }
+  .foot { margin-top: 9px; text-align: center; font-size: 11px; font-weight: 600; }
+  .pix { padding: 3mm 0; font-size: 12px; }
   .qr { display: block; width: 42mm; height: 42mm; margin: 3mm auto; image-rendering: pixelated; }
   .no-print button { margin: 3px; padding: 7px 10px; font: inherit; }
-  @media print { .no-print { display: none !important; } body { width: 80mm; } }
+  @media print { .no-print { display: none !important; } body { width: 80mm; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
@@ -96,15 +100,15 @@ export function buildReceiptHtml(
   <p class="center">COMPROVANTE DE SERVIÇO — OS #${atendimento.numero}</p>
   <hr />
   <table>
-    <tr><td>Cliente</td><td class="num">${escapeHtml(atendimento.cliente_nome)}</td></tr>
-    ${atendimento.cliente_telefone ? `<tr><td>Telefone</td><td class="num">${escapeHtml(atendimento.cliente_telefone)}</td></tr>` : ""}
-    <tr><td>Veículo</td><td class="num">${escapeHtml([atendimento.fabricante, atendimento.modelo].filter(Boolean).join(" "))}</td></tr>
-    <tr><td>Placa</td><td class="num">${escapeHtml(atendimento.placa)}</td></tr>
-    ${atendimento.km ? `<tr><td>KM</td><td class="num">${atendimento.km.toLocaleString("pt-BR")}</td></tr>` : ""}
+    <tr><td class="label">Cliente</td><td class="value">${escapeHtml(atendimento.cliente_nome)}</td></tr>
+    ${atendimento.cliente_telefone ? `<tr><td class="label">Telefone</td><td class="value">${escapeHtml(atendimento.cliente_telefone)}</td></tr>` : ""}
+    <tr><td class="label">Veículo</td><td class="value">${escapeHtml([atendimento.fabricante, atendimento.modelo].filter(Boolean).join(" "))}</td></tr>
+    <tr><td class="label">Placa</td><td class="value">${escapeHtml(atendimento.placa)}</td></tr>
+    ${atendimento.km ? `<tr><td class="label">KM</td><td class="value">${atendimento.km.toLocaleString("pt-BR")}</td></tr>` : ""}
   </table>
   <hr />
   <p class="muted">SERVIÇOS / PEÇAS</p>
-  <table>${linhasServicos}</table>
+  <table class="items">${linhasServicos}</table>
   <hr />
   <table>
     <tr><td>Subtotal</td><td class="num">${brl(bruto)}</td></tr>
@@ -113,7 +117,7 @@ export function buildReceiptHtml(
   </table>
   <hr />
   <p class="muted">FORMA DE PAGAMENTO</p>
-  <table>${linhasPagamentos}</table>
+  <table class="items">${linhasPagamentos}</table>
   ${pixSection}
   <hr />
   ${atendimento.garantia_ate ? `<p class="center">Garantia válida até ${d(atendimento.garantia_ate)}</p><hr />` : ""}

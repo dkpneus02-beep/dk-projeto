@@ -1396,6 +1396,10 @@ export type Database = {
         Args: { _atendimento_id: string }
         Returns: Json
       }
+      marcar_atendimento_pago_com_formas: {
+        Args: { _atendimento_id: string; _formas: Json }
+        Returns: Json
+      }
       limpar_orcamentos_expirados: { Args: never; Returns: number }
       mecanico_id_permitido: {
         Args: { _mecanico_id: string }

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, PageHeader } from "@/components/AppShell";
 import { NovoAtendimentoDialog } from "@/components/NovoAtendimentoDialog";
-import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
+import { ConfirmarRecebimentoDialog, type FormaPagamentoConfirmada } from "@/components/ConfirmarRecebimentoDialog";
 import { Button } from "@/components/ui/button";
 import { brl, dt, statusLabel } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -61,9 +61,10 @@ function Patio() {
   const { data, isLoading } = usePatio();
   const carros = data ?? [];
   const marcarAtendimentoPago = useMutation({
-    mutationFn: async (atendimentoId: string) => {
-      const { error } = await supabase.rpc("marcar_atendimento_pago", {
+    mutationFn: async ({ atendimentoId, pagamentos }: { atendimentoId: string; pagamentos: FormaPagamentoConfirmada[] }) => {
+      const { error } = await supabase.rpc("marcar_atendimento_pago_com_formas", {
         _atendimento_id: atendimentoId,
+        _formas: pagamentos,
       });
       if (error) throw error;
     },
@@ -147,22 +148,18 @@ function Patio() {
                 )}
               </Link>
               {aguardandoPagamento && gerente && (
-                <ConfirmActionDialog
+                <ConfirmarRecebimentoDialog
+                  atendimentoId={c.id}
+                  total={Number(c.total)}
                   trigger={
                     <Button className="mt-4 w-full" disabled={marcarAtendimentoPago.isPending}>
-                      <i className="fa-solid fa-cash-register" /> Confirmar pagamento
+                      <i className="fa-solid fa-money-bill-transfer" /> Revisar forma e confirmar pagamento
                     </Button>
                   }
-                  title="Confirmar pagamento e liberar a OS"
-                  description={
-                    <>
-                      Confirma que recebeu{" "}
-                      <strong className="text-foreground">{brl(c.total)}</strong>? O valor será
-                      lançado no caixa aberto e a OS deixará o Pátio para aparecer no Histórico.
-                    </>
+                  disabled={marcarAtendimentoPago.isPending}
+                  onConfirm={(pagamentos) =>
+                    marcarAtendimentoPago.mutateAsync({ atendimentoId: c.id, pagamentos })
                   }
-                  confirmLabel="Sim, registrar no caixa"
-                  onConfirm={() => marcarAtendimentoPago.mutateAsync(c.id)}
                 />
               )}
             </div>

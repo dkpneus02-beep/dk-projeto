@@ -38,6 +38,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { isGerente, canEditServico } from "@/lib/permissions";
 import { printReceipt } from "@/lib/receipt";
+import { ConfirmarRecebimentoDialog, type FormaPagamentoConfirmada } from "@/components/ConfirmarRecebimentoDialog";
 import { uploadVistoriaImgBB } from "@/lib/imgbb";
 import { normalizarFotos, type VistoriaFoto } from "@/lib/vistoria";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
@@ -430,6 +431,21 @@ function AtendimentoPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const marcarAtendimentoPagoComFormas = useMutation({
+    mutationFn: async (pagamentos: FormaPagamentoConfirmada[]) => {
+      const { error } = await supabase.rpc("marcar_atendimento_pago_com_formas", {
+        _atendimento_id: id,
+        _formas: pagamentos,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Recebimento registrado no caixa; a OS foi liberada para o Histórico.");
+      void qc.invalidateQueries();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   if (isLoading || !data) {
     return (
       <AppShell>
@@ -522,6 +538,70 @@ function AtendimentoPage() {
     } catch (error) {
       win.document.body.textContent = error instanceof Error ? error.message : "Não foi possível gerar a nota.";
       toast.error(error instanceof Error ? error.message : "Não foi possível gerar a nota.");
+    }
+  };
+
+  const imprimirNotaAtual = async () => {
+    const win = window.open("", "_blank", "width=420,height=760");
+    if (!win) {
+      toast.error("Permita a abertura da janela para imprimir ou reimprimir a nota.");
+      return;
+    }
+    win.document.write("<p style='font:16px Arial;padding:24px'>Preparando a nota…</p>");
+    try {
+      const reciboGerado = await printReceipt(
+        {
+          numero: data.numero,
+          placa: data.placa ?? "",
+          modelo: data.modelo,
+          fabricante: data.fabricante,
+          km: data.km,
+          cliente_nome: data.cliente_nome ?? "",
+          cliente_telefone: data.cliente_telefone,
+          desconto: Number(data.desconto ?? 0),
+          desconto_balcao: data.desconto_balcao,
+          desconto_pecas:
+            data.desconto_balcao == null
+              ? null
+              : Math.max(Number(data.desconto ?? 0) - Number(data.desconto_balcao), 0),
+          total: Number(data.total ?? 0),
+          finalizado_at: data.finalizado_at,
+          garantia_ate: data.garantia_ate,
+        },
+        servicos.map((servico) => ({
+          nome:
+            servico.tipo_item === "peca" || Boolean(servico.peca_id)
+              ? servico.nome_peca_snapshot ??
+                (pecas ?? []).find((peca) => peca.id === servico.peca_id)?.nome ??
+                servico.nome
+              : servico.nome,
+          valor: Number(servico.valor),
+          quantidade: Number(servico.quantidade ?? 1),
+        })),
+        (data.pagamentos ?? []).map((pagamento) => ({
+          forma: pagamento.forma,
+          valor: Number(pagamento.valor),
+          parcelas: Number(pagamento.parcelas ?? 1),
+          pago: pagamento.pago,
+        })),
+        {
+          nome_oficina: config?.nome_oficina || "DK Auto Center",
+          endereco: config?.endereco ?? "",
+          telefone: config?.telefone ?? "",
+          cnpj: config?.cnpj ?? "",
+          pix_chave: config?.pix_chave ?? "32801574000155",
+          pix_nome_recebedor: config?.pix_nome_recebedor ?? "DK AUTO CENTER",
+          pix_cidade: config?.pix_cidade ?? "SALGUEIRO",
+        },
+        win,
+      );
+      if (!reciboGerado) {
+        toast.error("Não foi possível preparar a nota. Nenhum pagamento foi alterado.");
+        return;
+      }
+      toast.success("Nota aberta para impressão. Esta ação não altera o pagamento nem o caixa.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível preparar a nota.");
     }
   };
 
@@ -655,17 +735,27 @@ function AtendimentoPage() {
             <GarantiaTag ate={data.garantia_ate} km={data.garantia_km} kmEntrada={data.km} />
           </div>
           {gerente && pagamentosPendentes && (
-            <ConfirmActionDialog
+            <ConfirmarRecebimentoDialog
+              atendimentoId={data.id}
+              total={Number(data.total)}
               trigger={
-                <Button disabled={marcarAtendimentoPago.isPending}>
-                  <i className="fa-solid fa-cash-register" /> Pagamento feito e concluir OS
+                <Button disabled={marcarAtendimentoPagoComFormas.isPending}>
+                  <i className="fa-solid fa-money-bill-transfer" /> Revisar forma, confirmar pagamento e concluir OS
                 </Button>
               }
-              title="Confirmar recebimento da OS"
-              description={<>Confirma que recebeu <strong className="text-foreground">{brl(data.total)}</strong>? Os pagamentos serão lançados no caixa aberto e a OS sairá do pátio para o Histórico.</>}
-              confirmLabel="Sim, registrar e concluir"
-              onConfirm={() => marcarAtendimentoPago.mutateAsync()}
+              disabled={marcarAtendimentoPagoComFormas.isPending}
+              onConfirm={(pagamentos) => marcarAtendimentoPagoComFormas.mutateAsync(pagamentos)}
             />
+          )}
+          {gerente && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void imprimirNotaAtual()}
+              title="A impressão não registra recebimento nem altera o caixa"
+            >
+              <i className="fa-solid fa-receipt" /> Imprimir / reimprimir nota
+            </Button>
           )}
           <Button variant="outline" asChild>
             <a
@@ -1472,16 +1562,18 @@ function AtendimentoPage() {
               <AlertDialogDescription>
                 {perguntaFinalizarTudo ? (
                   <>
-                    Esta opção registra como recebido no caixa aberto todos os pagamentos informados
-                    e libera a OS para o Histórico. Deseja gerar e imprimir a notinha agora? Se
-                    escolher não, o recebimento também será registrado, mas sem imprimir.
+                    Esta opção deve ser usada somente se o cliente já pagou: ela registra os
+                    pagamentos no caixa aberto e libera a OS para o Histórico. Imprimir ou não a nota
+                    não muda esse registro. Se o recebimento ainda estiver pendente, volte e use a
+                    impressão independente, sem confirmar o pagamento.
                   </>
                 ) : (
                   <>
                     A OS foi finalizada, mas nenhum recebimento será lançado automaticamente. Se o
                     cliente já pagou, feche este aviso e use “Confirmar recebimento” na tela da OS; isso
-                    lançará os pagamentos no caixa aberto. A nota abaixo mantém o pagamento pendente e
-                    mostra o QR Pix quando aplicável.
+                    lançará os pagamentos no caixa aberto. Você pode imprimir ou reimprimir a nota
+                    nesta tela sem confirmar recebimento; a nota mantém o estado atual e mostra o QR Pix
+                    quando aplicável.
                   </>
                 )}
               </AlertDialogDescription>
@@ -1503,14 +1595,14 @@ function AtendimentoPage() {
                     disabled={finalizandoTudo}
                     onClick={() => void finalizarTudo(false)}
                   >
-                    Não imprimir; registrar e ir ao Histórico
+                    Registrar recebimento e ir ao Histórico (sem imprimir)
                   </Button>
                   <Button
                     type="button"
                     disabled={finalizandoTudo}
                     onClick={() => void finalizarTudo(true)}
                   >
-                    Sim, registrar, imprimir e ir ao Histórico
+                    Registrar recebimento, imprimir e ir ao Histórico
                   </Button>
                 </>
               ) : (
